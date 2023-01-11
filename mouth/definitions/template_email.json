@@ -1,0 +1,69 @@
+{
+	"__sql__": {
+		"auto_primary": "UUID()",
+		"changes": ["user"],
+		"create": [
+			"_created", "_updated", "template", "locale", "subject", "text",
+			"html"
+		],
+		"db": "mouth",
+		"host": "primary",
+		"indexes": {
+			"template_locale": {"unique": ["template", "locale"]}
+		},
+		"primary": "_id",
+		"table": "template",
+		"charset": "utf8mb4",
+		"collate": "utf8mb4_unicode_ci"
+	},
+
+	"__name__": "Mouth_Template_Email",
+
+	"_id": {
+		"__type__": "uuid",
+		"__optional__": true
+	},
+
+	"_created": {
+		"__type__":"timestamp",
+		"__optional__": true,
+		"__sql__": {
+			"opts": "default CURRENT_TIMESTAMP"
+		}
+	},
+
+	"_updated": {
+		"__type__":"timestamp",
+		"__optional__": true,
+		"__sql__": {
+			"opts": "default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP"
+		}
+	},
+
+	"template": {
+		"__type__": "uuid"
+	},
+
+	"locale": {
+		"__type__": "string",
+		"__regex__": "^[a-z]{2}-[A-Z]{2}$",
+		"__sql__": {
+			"type": "char(5)"
+		}
+	},
+
+	"subject": {
+		"__type__": "string",
+		"__maximum__": 255
+	},
+
+	"text": {
+		"__type__": "string",
+		"__maximum__": 65535
+	},
+
+	"html": {
+		"__type__": "string",
+		"__maximum__": 65535
+	}
+}

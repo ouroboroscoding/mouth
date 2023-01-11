@@ -1,0 +1,48 @@
+{
+	"__sql__": {
+		"auto_primary": false,
+		"create": [
+			"_archived", "_created", "name"
+		],
+		"db": "mouth",
+		"host": "primary",
+		"indexes": {
+			"name": {"unique": null}
+		},
+		"primary": "_id",
+		"table": "locale",
+		"charset": "utf8mb4",
+		"collate": "utf8mb4_unicode_ci"
+	},
+
+	"__name__": "Mouth_Locale",
+
+	"_id": {
+		"__type__": "string",
+		"__regex__": "^[a-z]{2}-[A-Z]{2}$",
+		"__sql__": {
+			"type": "char(5)"
+		}
+	},
+
+	"_archived": {
+		"__type__": "bool",
+		"__optional__": true,
+		"__sql__": {
+			"opts": "default 0"
+		}
+	},
+
+	"_created": {
+		"__type__":"timestamp",
+		"__optional__": true,
+		"__sql__": {
+			"opts": "default CURRENT_TIMESTAMP"
+		}
+	},
+
+	"name": {
+		"__type__": "string",
+		"__maximum__": 64
+	}
+}
