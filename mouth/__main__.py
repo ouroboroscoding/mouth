@@ -13,7 +13,7 @@ __created__		= "2022-12-12"
 # Python imports
 import os
 import platform
-from pprint import pformat
+import sys
 
 # Pip imports
 from body import errors
@@ -21,6 +21,7 @@ from RestOC import Conf, EMail, Record_MySQL, REST, Services, Session
 
 # Module imports
 from . import Mouth
+from . import records
 
 def cli():
 	"""CLI
@@ -31,11 +32,8 @@ def cli():
 		uint
 	"""
 
-	# Load the config
-	Conf.load('config.json')
-	sConfOverride = 'config.%s.json' % platform.node()
-	if os.path.isfile(sConfOverride):
-		Conf.load_merge(sConfOverride)
+	# Call the initial setup
+	setup()
 
 	# Init the email module
 	EMail.init(Conf.get('email', {
@@ -111,12 +109,16 @@ def cli():
 	# Create the HTTP server and map requests to service
 	REST.Server({
 
+		'/email': {'methods': REST.CREATE},
+
 		'/locale': {'methods': REST.ALL, 'session': True},
+
+		'/sms': {'methods': REST.CREATE},
 
 		'/template': {'methods': REST.ALL, 'session': True},
 		'/template/email': {'methods': REST.CREATE | REST.UPDATE | REST.DELETE, 'session': True},
-		'/template/sms': {'methods': REST.CREATE | REST.UPDATE | REST.DELETE, 'session': True},
 		'/template/generate': {'methods': REST.READ},
+		'/template/sms': {'methods': REST.CREATE | REST.UPDATE | REST.DELETE, 'session': True}
 
 		},
 		'mouth',
@@ -129,6 +131,52 @@ def cli():
 		timeout='timeout' in oRestConf['mouth'] and oRestConf['mouth']['timeout'] or 30
 	)
 
+	# Return OK
+	return 0
+
+def install():
+	"""Install
+
+	Installs tables and records needed
+
+	Returns
+		uint
+	"""
+
+	# Call the initial setup
+	setup()
+
+	# Install tables
+	records.install()
+
+def setup():
+	"""Setup
+
+	Shared setup code
+
+	Returns:
+		None
+	"""
+
+	# Load the config
+	Conf.load('config.json')
+	sConfOverride = 'config.%s.json' % platform.node()
+	if os.path.isfile(sConfOverride):
+		Conf.load_merge(sConfOverride)
+
+	# Add the global prepend
+	Record_MySQL.db_prepend(Conf.get(('mysql', 'prepend'), ''))
+
+	# Add the primary mysql DB
+	Record_MySQL.add_host('primary', Conf.get(('mysql', 'hosts', 'mouth')))
+
 # Only run if called directly
 if __name__ == '__main__':
-	cli()
+
+	if len(sys.argv) > 1 and sys.argv[1] == 'install':
+		iRet = install()
+
+	else:
+		iRet = cli()
+
+	sys.exit(iRet)

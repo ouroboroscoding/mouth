@@ -16,7 +16,7 @@ import re
 
 # Pip imports
 from body import access, errors
-from RestOC import	DictHelper, Record_Base, Services
+from RestOC import	DictHelper, Record_Base, Services, StrHelper
 
 # Records imports
 from .records import Locale, Template, TemplateEmail, TemplateSMS
@@ -109,6 +109,214 @@ class Mouth(Services.Service):
 
 		# Return errors (might be empty)
 		return lErrors
+
+	@classmethod
+	def _generateEmail(cls, content, locale, variables, templates=None):
+		"""Generate Email
+
+		Takes content, locale, and variables, and renders the final result of
+		the three parts of the email template
+
+		Arguments:
+			content (dict of str:str): The content to be rendered, 'subject',
+										'text', and 'html'
+			locale (str): The locale used for embedded templates
+			variables (dict of str:str): The variable names and their values
+			templates (dict of str:str): The templates already looked up
+
+		Returns:
+			dict of str:str
+		"""
+
+		# If there's no templates yet
+		if not templates:
+			templates = {}
+
+		# Copy the contents
+		dContent = DictHelper.clone(content)
+
+		# Go through each each part of the template
+		for s in ['subject', 'text', 'html']:
+
+			# If the part is somehow missing
+			if s not in dContent:
+				dContent[s] = '!!!%s missing!!!' % s
+				continue
+
+			# Look for embedded templates
+			for sTpl in cls._re_tpl.findall(dContent[s]):
+
+				# If we don't have the template yet
+				if sTpl not in templates:
+
+					# Look for the primary template
+					dTemplate = Template.get(sTpl, index='name', raw=['_id'], limit=1)
+
+					# If it doesn't exist
+					if not dTemplate:
+						templates[sTpl] = {
+							'subject': '!!!#%s# does not exist!!!' % sTpl,
+							'text': '!!!#%s# does not exist!!!' % sTpl,
+							'html': '!!!#%s# does not exist!!!' % sTpl
+						}
+
+					# Else
+					else:
+
+						# Look for the locale dContent
+						dEmail = TemplateEmail.filter({
+							'template': dTemplate['_id'],
+							'locale': locale
+						}, raw=['subject', 'text', 'html'], limit=1)
+
+						# If it doesn't exist
+						if not dEmail:
+							templates[sTpl] = {
+								'subject': '!!!#%s.%s# does not exist!!!' % (sTpl, locale),
+								'text': '!!!#%s.%s# does not exist!!!' % (sTpl, locale),
+								'html': '!!!#%s.%s# does not exist!!!' % (sTpl, locale)
+							}
+
+						# Else, generate the embedded template
+						else:
+							templates[sTpl] = cls._generateEmail(
+								dEmail, locale, variables, templates
+							)
+
+				# Replace the string with the value from the child
+				dContent[s] = dContent[s].replace('#%s#' % sTpl, templates[sTpl][s])
+
+			# Handle the variables and conditionals
+			dContent[s] = cls._generateContent(dContent[s], variables)
+
+		# Return the new contents
+		return dContent
+
+	@classmethod
+	def _generateSMS(cls, content, locale, variables, templates=None):
+		"""Generate SMS
+
+		Takes content, locale, and variables, and renders the final result of
+		the template
+
+		Arguments:
+			content (s): The content to be rendered
+			locale (str): The locale used for embedded templates
+			variables (dict of str:str): The variable names and their values
+			templates (dict of str:str): The templates already looked up
+
+		Returns:
+			str
+		"""
+
+		# If there's no templates yet
+		if not templates:
+			templates = {}
+
+		# Look for embedded templates
+		for sTpl in cls._re_tpl.findall(content):
+
+			# If we don't have the template yet
+			if sTpl not in templates:
+
+				# Look for the primary template
+				dTemplate = Template.get(sTpl, index='name', raw=['_id'], limit=1)
+
+				# If it doesn't exist
+				if not dTemplate:
+					templates[sTpl] = '!!!#%s# does not exist!!!' % sTpl
+
+				# Else
+				else:
+
+					# Look for the locale dContent
+					dSMS = TemplateEmail.filter({
+						'template': dTemplate['_id'],
+						'locale': locale
+					}, raw=['content'], limit=1)
+
+					# If it doesn't exist
+					if not dSMS:
+						templates[sTpl] = '!!!#%s.%s# does not exist!!!' % (sTpl, locale)
+
+					# Else, generate the embedded template
+					else:
+						templates[sTpl] = cls._generateEmail(
+							dSMS['content'], locale, variables, templates
+						)
+
+			# Replace the string with the value from the child
+			content = content.replace('#%s#' % sTpl, templates[sTpl])
+
+		# Handle the variables and conditionals
+		content = cls._generateContent(content, variables)
+
+		# Return the new contents
+		return content
+
+	@classmethod
+	def _generateContent(cls, content, variables):
+		"""Generate Content
+
+		Handles variables and conditionals in template content as it's the same
+		logic for Emails and SMSs
+
+		Arguments:
+			content (str): The content to render
+			variables (dict of str:mixed): The variable names and values
+
+		Returns:
+			str
+		"""
+
+		# Look for variables
+		for sVar in cls._re_data.findall(content):
+
+			# Replace the string with the data value
+			content = content.replace('{%s}' % sVar, sVar in variables and str(variables[sVar]) or '!!!{%s} does not exist!!!' % sVar)
+
+		# Look for conditionals
+		for oConditional in cls._re_conditional.finditer(content):
+
+			# Get the entire text to replace
+			sReplace = oConditional.group(0)
+
+			# Get the conditional parts
+			sVarName, sVarTest, mVarVal, sContent = oConditional.groups()
+
+			# Check for the variable
+			if sVarName not in variables:
+				content = content.replace(sReplace, 'INVALID VARIABLE IN CONDITIONAL')
+				continue
+
+			# Get the type of value for the variable
+			oVarType = type(variables[sVarName])
+
+			# Attempt to convert the value from a string if required
+			try:
+
+				# If it's a bool
+				if oVarType == bool:
+					mVarVal = StrHelper.to_bool(mVarVal)
+
+				# Else, if it's not a string
+				elif oVarType != str:
+					mVarVal = oVarType(mVarVal)
+
+			# If we can't convert the value
+			except ValueError:
+				content = content.replace(sReplace, '!!!%s has invalid value in conditional!!!' % sVarName)
+				continue
+
+			# Figure out if the condition passed or not
+			bPassed = cls._conditional[sVarTest](variables[sVarName], mVarVal)
+
+			# Replace the conditional with the inner text if it passed, else
+			#	just remove it
+			content = content.replace(sReplace, bPassed and sContent or '')
+
+		# Return new content
+		return content
 
 	def initialise(self):
 		"""Initialise
@@ -612,6 +820,44 @@ class Mouth(Services.Service):
 		# Save the record and return the result
 		return Services.Response(
 			oEmail.save()
+		)
+
+	def template_generate_read(self, req):
+		"""Template Generate read
+
+		Generates a template from the base variable data for the purposes of
+		testing / validating
+
+		Arguments:
+			req (dict): The request data: body, session, and environment
+
+		Returns:
+			Services.Response
+		"""
+
+		# Make sure the client has access via the session
+		access.verify(req['session'], 'mouth_content', access.READ)
+
+		# Check minimum fields
+		try: DictHelper.eval(req['body'], ['template', 'locale', 'content'])
+		except ValueError as e: return Services.Error(errors.BODY_FIELD, ((f, 'missing') for f in e.args))
+
+		# Find the template variables
+		dTemplate = Template.get(req['body']['template'], raw=['variables'])
+		if not dTemplate:
+			return Services.Error(errors.DB_NO_RECORD, (req['body']['template'], 'template'))
+
+		# If the locale doesn't exist
+		if not Locale.exists(req['body']['locale']):
+			return Services.Error(errors.DB_NO_RECORD, (req['body']['locale'], 'locale'))
+
+		# Generate the template and return it
+		return Services.Response(
+			self._generateTemplate(
+				req['body']['content'],
+				req['body']['locale'],
+				dTemplate['variables']
+			)
 		)
 
 	def template_sms_create(self, req):

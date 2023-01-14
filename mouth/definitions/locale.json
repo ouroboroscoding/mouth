@@ -10,7 +10,7 @@
 			"name": {"unique": null}
 		},
 		"primary": "_id",
-		"table": "locale",
+		"table": "mouth_locale",
 		"charset": "utf8mb4",
 		"collate": "utf8mb4_unicode_ci"
 	},
@@ -34,7 +34,7 @@
 	},
 
 	"_created": {
-		"__type__":"timestamp",
+		"__type__": "timestamp",
 		"__optional__": true,
 		"__sql__": {
 			"opts": "default CURRENT_TIMESTAMP"

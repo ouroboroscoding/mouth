@@ -10,9 +10,15 @@ __maintainer__	= "Chris Nasr"
 __email__		= "chris@ouroboroscoding.com"
 __created__		= "2022-12-12"
 
+# Python imports
+import pathlib
+
 # Pip imports
 from FormatOC import Tree
 from RestOC import Conf, Record_MySQL
+
+# Get the definitions path
+_defPath = '%s/definitions' % pathlib.Path(__file__).parent.resolve()
 
 def install():
 	"""Install
@@ -52,7 +58,7 @@ class Locale(Record_MySQL.Record):
 		# If we haven't loaded the config yet
 		if not cls._conf:
 			cls._conf = Record_MySQL.Record.generate_config(
-				Tree.fromFile('definitions/locale.json'),
+				Tree.fromFile('%s/locale.json' % _defPath),
 				db=Conf.get(('mysql', 'db'), 'mouth')
 			)
 
@@ -84,7 +90,7 @@ class Template(Record_MySQL.Record):
 		# If we haven't loaded the config yet
 		if not cls._conf:
 			cls._conf = Record_MySQL.Record.generate_config(
-				Tree.fromFile('definitions/template.json'),
+				Tree.fromFile('%s/template.json' % _defPath),
 				db=Conf.get(('mysql', 'db'), 'mouth')
 			)
 
@@ -116,7 +122,7 @@ class TemplateEmail(Record_MySQL.Record):
 		# If we haven't loaded the config yet
 		if not cls._conf:
 			cls._conf = Record_MySQL.Record.generate_config(
-				Tree.fromFile('definitions/template_email.json'),
+				Tree.fromFile('%s/template_email.json' % _defPath),
 				db=Conf.get(('mysql', 'db'), 'mouth')
 			)
 
@@ -148,7 +154,7 @@ class TemplateSMS(Record_MySQL.Record):
 		# If we haven't loaded the config yet
 		if not cls._conf:
 			cls._conf = Record_MySQL.Record.generate_config(
-				Tree.fromFile('definitions/template_sms.json'),
+				Tree.fromFile('%s/template_sms.json' % _defPath),
 				db=Conf.get(('mysql', 'db'), 'mouth')
 			)
 

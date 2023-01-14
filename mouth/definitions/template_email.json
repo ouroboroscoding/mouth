@@ -12,7 +12,7 @@
 			"template_locale": {"unique": ["template", "locale"]}
 		},
 		"primary": "_id",
-		"table": "template",
+		"table": "mouth_template_email",
 		"charset": "utf8mb4",
 		"collate": "utf8mb4_unicode_ci"
 	},
@@ -25,7 +25,7 @@
 	},
 
 	"_created": {
-		"__type__":"timestamp",
+		"__type__": "timestamp",
 		"__optional__": true,
 		"__sql__": {
 			"opts": "default CURRENT_TIMESTAMP"
@@ -33,7 +33,7 @@
 	},
 
 	"_updated": {
-		"__type__":"timestamp",
+		"__type__": "timestamp",
 		"__optional__": true,
 		"__sql__": {
 			"opts": "default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP"
