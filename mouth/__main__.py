@@ -71,7 +71,7 @@ def cli():
 	Session.init(dRedis)
 
 	# Get the REST config
-	dRest = Conf.get('rest'), {
+	dRest = Conf.get('rest', {
 		'allowed': 'localhost',
 		'default': {
 			'domain': 'localhost',
@@ -83,7 +83,7 @@ def cli():
 		'services': {
 			'mouth': {'port': 0}
 		}
-	}
+	})
 
 	# Create the REST config instance
 	oRestConf = REST.Config(dRest)
