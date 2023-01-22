@@ -11,18 +11,20 @@ __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-01-05"
 
 # Python imports
+from base64 import b64decode
+from hashlib import md5
 from operator import itemgetter
 import re
 
 # Pip imports
-from body import access, errors
-from RestOC import	DictHelper, Record_Base, Services, StrHelper
+import body
+from RestOC import	DictHelper, Record_Base, Services, SMTP, StrHelper
 
 # Records imports
-from .records import Locale, Template, TemplateEmail, TemplateSMS
+from mouth.records import Locale, Template, TemplateEmail, TemplateSMS
 
 # Errors
-from .errors import TEMPLATE_CONTENT_ERROR
+from mouth import errors
 
 class Mouth(Services.Service):
 	"""Mouth Service class
@@ -95,7 +97,7 @@ class Mouth(Services.Service):
 				# Get the missing templates
 				for s in lsTemplates:
 					if s not in lTemplates:
-						lErrors.add(('template', s))
+						lErrors.add[['template', s]]
 
 		# If there's any variables
 		if lsVariables:
@@ -105,13 +107,115 @@ class Mouth(Services.Service):
 
 				# If it's not in the templates list
 				if s not in variables:
-					lErrors.add(('variable', s))
+					lErrors.add[['variable', s]]
 
 		# Return errors (might be empty)
 		return lErrors
 
+	def _email(self, opts):
+		"""Email
+
+		Handles the actual sending of the email
+
+		Arguments:
+			opts (dict): The options
+
+		Returns:
+			Services.Response
+		"""
+
+		# If the from is not set
+		if 'from' not in opts:
+			opts['from'] = self.emailConf['from']
+
+		# If we got a _queue_ value
+		if '_queue_' in opts:
+
+			# Store it
+			sQueueKey = opts.pop('_queue_')
+
+			# If it's not valid
+			if not self._queue_key(opts, sQueueKey):
+				return Services.Error(body.errors.BODY_FIELD)
+
+			# Else, we're good
+			opts['_queue_'] = True
+
+		# If we are sending direct, or we got a valid request from the queue
+		if self.emailConf['method'] == 'direct' or '_queue_' in opts:
+
+			# Init the attachments var
+			mAttachments = None
+
+			# If there's an attachment
+			if 'attachments' in opts:
+
+				# Make sure it's a list
+				if not isinstance(opts['attachments'], (list,tuple)):
+					opts['attachments'] = [opts['attachments']]
+
+				# Loop through the attachments
+				for i in range(len(opts['attachments'])):
+
+					# If we didn't get a dictionary
+					if not isinstance(opts['attachments'][i], dict):
+						return Services.Error(errors.ATTACHMENT_STRUCTURE, 'attachments.[%d]' % i)
+
+					# If the fields are missing
+					try:
+						DictHelper.eval(opts['attachments'][i], ['body', 'filename'])
+					except ValueError as e:
+						return Services.Error(body.errors.BODY_FIELD, [['attachments.[%d].%s' % (i, s), 'invalid'] for s in e.args])
+
+					# Try to decode the base64
+					try:
+						opts['attachments'][i]['body'] = b64decode(opts['attachments'][i]['body'])
+					except TypeError:
+						return Services.Response(errors.ATTACHMENT_DECODE)
+
+				# Set the attachments from the opts
+				mAttachments = opts['attachments']
+
+			# Only send if anyone is allowed, or the to is in the allowed
+			if not self.emailConf['allowed'] or opts['to'] in self.emailConf['allowed']:
+
+				# Send the e-mail
+				iRes = SMTP.send(
+					opts['to'], opts['subject'],
+					text_body=opts['text_body'],
+					html_body=opts['html_body'],
+					from_=opts['from'],
+					attachments=mAttachments
+				)
+
+				# If there was an error
+				if iRes != SMTP.OK:
+					return Services.Error(errors.SMTP_ERROR, '%i %s' % (iRes, SMTP.lastError()))
+
+		# Else, we are sending to the queue first
+		else:
+
+			# Add a queue key to the data
+			opts['_queue_'] = self._queue_key(opts)
+
+			# Send the data to the queue service
+			oResponse = Services.create('queue', 'msg', {'body': {
+				'_internal_': Services.internalKey(),
+				'service': 'communication',
+				'path': 'email/text',
+				'method': 'create',
+				'data': opts
+			}})
+
+			# Return if there's an error
+			if oResponse.error_exists():
+				return oResponse
+
+		# Return OK
+		return Services.Response(True)
+
 	@classmethod
-	def _generateEmail(cls, content, locale, variables, templates=None):
+	def _generate_email(cls, content, locale, variables, templates=None):
 		"""Generate Email
 
 		Takes content, locale, and variables, and renders the final result of
@@ -179,7 +283,7 @@ class Mouth(Services.Service):
 
 						# Else, generate the embedded template
 						else:
-							templates[sTpl] = cls._generateEmail(
+							templates[sTpl] = cls._generate_email(
 								dEmail, locale, variables, templates
 							)
 
@@ -187,20 +291,20 @@ class Mouth(Services.Service):
 				dContent[s] = dContent[s].replace('#%s#' % sTpl, templates[sTpl][s])
 
 			# Handle the variables and conditionals
-			dContent[s] = cls._generateContent(dContent[s], variables)
+			dContent[s] = cls._generate_content(dContent[s], variables)
 
 		# Return the new contents
 		return dContent
 
 	@classmethod
-	def _generateSMS(cls, content, locale, variables, templates=None):
+	def _generate_sms(cls, content, locale, variables, templates=None):
 		"""Generate SMS
 
 		Takes content, locale, and variables, and renders the final result of
 		the template
 
 		Arguments:
-			content (s): The content to be rendered
+			content (str): The content to be rendered
 			locale (str): The locale used for embedded templates
 			variables (dict of str:str): The variable names and their values
 			templates (dict of str:str): The templates already looked up
@@ -230,7 +334,7 @@ class Mouth(Services.Service):
 				else:
 
 					# Look for the locale dContent
-					dSMS = TemplateEmail.filter({
+					dSMS = TemplateSMS.filter({
 						'template': dTemplate['_id'],
 						'locale': locale
 					}, raw=['content'], limit=1)
@@ -241,7 +345,7 @@ class Mouth(Services.Service):
 
 					# Else, generate the embedded template
 					else:
-						templates[sTpl] = cls._generateEmail(
+						templates[sTpl] = cls._generate_sms(
 							dSMS['content'], locale, variables, templates
 						)
 
@@ -249,13 +353,13 @@ class Mouth(Services.Service):
 			content = content.replace('#%s#' % sTpl, templates[sTpl])
 
 		# Handle the variables and conditionals
-		content = cls._generateContent(content, variables)
+		content = cls._generate_content(content, variables)
 
 		# Return the new contents
 		return content
 
 	@classmethod
-	def _generateContent(cls, content, variables):
+	def _generate_content(cls, content, variables):
 		"""Generate Content
 
 		Handles variables and conditionals in template content as it's the same
@@ -318,6 +422,112 @@ class Mouth(Services.Service):
 		# Return new content
 		return content
 
+	def _queue_key(self, data, key=None):
+		"""Queue Key
+
+		If the key is not passed we are generating it, else we are validating it
+
+		Arguments:
+			data (dict): The data that was passed or retrieved
+			key (str): The key to validate if passed
+
+		Returns:
+			str|bool
+		"""
+
+		# Turn the data into a str and md5 it
+		sMD5 = md5(str(data).encode('utf-8')).hexdigest()
+
+		# If a key was received
+		if key:
+
+			# Decode it and see if it matches the data
+			return StrHelper.decrypt(self._queue_key, key) == sMD5
+
+		# Else
+		else:
+
+			# Generate and return a key
+			return StrHelper.encrypt(self._queue_key, sMD5)
+
+	def email_create(self, req):
+		"""E-Mail
+
+		Sends out an email to the requested email address given the correct
+		locale and template, or content
+
+		Arguments:
+			req (dict): The request data: body, session, and environment
+
+		Returns:
+			Services.Response
+		"""
+
+		# Check for internal key
+		body.access.internal(req['body'])
+
+		# Make sure that at minimum, we have a to field
+		if 'to' not in req['body']:
+			return Services.Error(body.errors.BODY_FIELD, [['to', 'missing']])
+
+		# If we received a template field
+		if 'template' in req['body']:
+
+			# Check minimum fields
+			try: DictHelper.eval(req['body']['template'], ['name', 'locale', 'variables'])
+			except ValueError as e: return Services.Error(body.errors.BODY_FIELD, [['template.%s' % f, 'missing'] for f in e.args])
+
+			# Find the template by name
+			dTemplate = Template.get(req['body']['template']['name'], index='name', raw=['_id'])
+			if not dTemplate:
+				return Services.Error(body.errors.DB_NO_RECORD, [req['body']['template']['name'], 'template'])
+
+			# Find the content by locale
+			dContent = TemplateEmail.filter({
+				'template': dTemplate['_id'],
+				'locale': req['body']['template']['locale']
+			}, raw=['subject', 'text', 'html'], limit=1)
+			if not dContent:
+				return Services.Error(body.errors.DB_NO_RECORD, ['%s.%s' % (dTemplate['_id'], req['body']['template']['locale']), 'template'])
+
+			# Generate the rendered content
+			dContent = self._generate_email(
+				dContent,
+				req['body']['template']['locale'],
+				req['body']['template']['variables']
+			)
+
+		# Else, if we recieved content
+		elif 'content' in req['body']:
+			dContent = req['body']['content']
+
+		# Else, nothing to send
+		else:
+			return Services.Error(body.errors.BODY_FIELD, [['content', 'missing']])
+
+		# Send the email and return the response
+		return self._email({
+			'to': req['body']['to'],
+			'subject': dContent['subject'],
+			'text_body': dContent['text'],
+			'html_body': dContent['body']
+		})
+
+	def sms_create(self, req):
+		"""SMS
+
+		Sends out an SMS to the requested phone number given the correct
+		locale and template, or content
+
+		Arguments:
+			req (dict): The request data: body, session, and environment
+
+		Returns:
+			Services.Response
+		"""
+		pass
+
+
 	def initialise(self):
 		"""Initialise
 
@@ -343,19 +553,19 @@ class Mouth(Services.Service):
 		"""
 
 		# Make sure the client has access via the session
-		access.verify(req['session'], 'mouth_locale', access.CREATE)
+		body.access.verify(req['session'], 'mouth_locale', body.access.CREATE)
 
 		# Verify the instance
 		try:
-			oLocale = Locale(req['data'])
+			oLocale = Locale(req['body'])
 		except ValueError as e:
-			return Services.Error(errors.BODY_FIELD, e.args[0])
+			return Services.Error(body.errors.BODY_FIELD, e.args[0])
 
 		# If it's valid data, try to add it to the DB
 		try:
 			oLocale.create()
 		except Record_Base.DuplicateException as e:
-			return Services.Error(errors.DB_DUPLICATE, 'locale')
+			return Services.Error(body.errors.DB_DUPLICATE, 'locale')
 
 		# Return OK
 		return Services.Response(True)
@@ -373,18 +583,18 @@ class Mouth(Services.Service):
 		"""
 
 		# Make sure the client has access via the session
-		access.verify(req['session'], 'mouth_locale', access.DELETE)
+		body.access.verify(req['session'], 'mouth_locale', body.access.DELETE)
 
 		# Make sure we have an ID
 		if '_id' not in req['body']:
-			return Services.Error(errors.BODY_FIELD, (('_id', 'missing')))
+			return Services.Error(body.errors.BODY_FIELD, [['_id', 'missing']])
 
 		# Look for the instance
 		oLocale = Locale.get(req['body']['_id'])
 
 		# If it doesn't exist
 		if not oLocale:
-			return Services.Error(errors.DB_NO_RECORD, (req['body']['_id'], 'locale'))
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['_id'], 'locale'))
 
 		# If it's being archived
 		if 'archive' in req['body'] and req['body']['archive']:
@@ -403,7 +613,7 @@ class Mouth(Services.Service):
 
 			# Return an error because we have existing templates still using the
 			#	locale
-			return Services.Error(errors.DB_KEY_BEING_USED, (oLocale['_id'], 'locale'))
+			return Services.Error(body.errors.DB_KEY_BEING_USED, (oLocale['_id'], 'locale'))
 
 		# Delete the record and return the result
 		return Services.Response(
@@ -423,7 +633,7 @@ class Mouth(Services.Service):
 		"""
 
 		# Make sure the client has access via the session
-		access.verify(req['session'], 'mouth_locale', access.READ)
+		body.access.verify(req['session'], 'mouth_locale', body.access.READ)
 
 		# If there's an ID
 		if '_id' in req['body']:
@@ -433,7 +643,7 @@ class Mouth(Services.Service):
 
 			# If it doesn't exist
 			if not dLocale:
-				return Services.Error(errors.DB_NO_RECORD, (req['body']['_id'], 'locale'))
+				return Services.Error(body.errors.DB_NO_RECORD, (req['body']['_id'], 'locale'))
 
 			# Return the raw data
 			return Services.Response(dLocale)
@@ -464,28 +674,28 @@ class Mouth(Services.Service):
 		"""
 
 		# Make sure the client has access via the session
-		access.verify(req['session'], 'mouth_locale', access.UPDATE)
+		body.access.verify(req['session'], 'mouth_locale', body.access.UPDATE)
 
 		# Check minimum fields
 		try: DictHelper.eval(req['body'], ['_id', 'name'])
-		except ValueError as e: return Services.Error(errors.BODY_FIELD, ((f, 'missing') for f in e.args))
+		except ValueError as e: return Services.Error(body.errors.BODY_FIELD, [[f, 'missing'] for f in e.args])
 
 		# Find the record
 		oLocale = Locale.get(req['body']['_id'])
 
 		# If it doesn't exist
 		if not oLocale:
-			return Services.Error(errors.DB_NO_RECORD, (req['body']['_id'], 'locale'))
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['_id'], 'locale'))
 
 		# If it's archived
 		if oLocale['_archived']:
-			return Services.Error(errors.DB_ARCHIVED, (req['body']['_id'], 'locale'))
+			return Services.Error(body.errors.DB_ARCHIVED, (req['body']['_id'], 'locale'))
 
 		# Try to update the name
 		try:
 			oLocale['name'] = req['body']['name']
 		except ValueError as e:
-			return Services.Error(errors.BODY_FIELD, [e.args[0]])
+			return Services.Error(body.errors.BODY_FIELD, [e.args[0]])
 
 		# Save the record and return the result
 		try:
@@ -493,7 +703,7 @@ class Mouth(Services.Service):
 				oLocale.save()
 			)
 		except Record_Base.DuplicateException as e:
-			return Services.Error(errors.DB_DUPLICATE, (req['body']['name'], 'template'))
+			return Services.Error(body.errors.DB_DUPLICATE, (req['body']['name'], 'template'))
 
 	def template_create(self, req):
 		"""Template create
@@ -508,23 +718,23 @@ class Mouth(Services.Service):
 		"""
 
 		# Make sure the client has access via the session
-		access.verify(req['session'], 'mouth_template', access.CREATE)
+		body.access.verify(req['session'], 'mouth_template', body.access.CREATE)
 
 		# If the name is missing
 		if 'name' not in req['body']:
-			return Services.Error(errors.BODY_FIELD, (('name', 'missing')))
+			return Services.Error(body.errors.BODY_FIELD, [['name', 'missing']])
 
 		# Verify the instance
 		try:
-			oTemplate = Template(req['data'])
+			oTemplate = Template(req['body'])
 		except ValueError as e:
-			return Services.Error(errors.BODY_FIELD, e.args[0])
+			return Services.Error(body.errors.BODY_FIELD, e.args[0])
 
 		# If it's valid data, try to add it to the DB
 		try:
-			oTemplate.create()
+			oTemplate.create(changes={'user': req['session']['user']['_id']})
 		except Record_Base.DuplicateException as e:
-			return Services.Error(errors.DB_DUPLICATE, 'template')
+			return Services.Error(body.errors.DB_DUPLICATE, 'template')
 
 		# Return the ID to indicate OK
 		return Services.Response(oTemplate['_id'])
@@ -542,18 +752,18 @@ class Mouth(Services.Service):
 		"""
 
 		# Make sure the client has access via the session
-		access.verify(req['session'], 'mouth_template', access.DELETE)
+		body.access.verify(req['session'], 'mouth_template', body.access.DELETE)
 
 		# If the ID is missing
 		if '_id' not in req['body']:
-			return Services.Error(errors.BODY_FIELD, (('_id', 'missing')))
+			return Services.Error(body.errors.BODY_FIELD, [['_id', 'missing']])
 
 		# Find the record
 		oTemplate = Template.get(req['body']['_id'])
 
 		# If it's not found
 		if not oTemplate:
-			return Services.Error(errors.DB_NO_RECORD, (req['body']['_id'], 'template'))
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['_id'], 'template'))
 
 		# Delete all Email templates associated
 		TemplateEmail.delete_get(req['body']['_id'], index='template')
@@ -579,18 +789,18 @@ class Mouth(Services.Service):
 		"""
 
 		# Make sure the client has access via the session
-		access.verify(req['session'], 'mouth_template', access.READ)
+		body.access.verify(req['session'], 'mouth_template', body.access.READ)
 
 		# If the ID is missing
 		if '_id' not in req['body']:
-			return Services.Error(errors.BODY_FIELD, (('_id', 'missing')))
+			return Services.Error(body.errors.BODY_FIELD, [['_id', 'missing']])
 
 		# Find the record
 		dTemplate = Template.get(req['body']['_id'], raw=True)
 
 		# if it doesn't exist
 		if not dTemplate:
-			return Services.Error(errors.DB_NO_RECORD, (req['body']['_id'], 'template'))
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['_id'], 'template'))
 
 		# Init the list of content
 		dTemplate['content'] = []
@@ -598,13 +808,17 @@ class Mouth(Services.Service):
 		# Find all associated email content
 		dTemplate['content'].extend([
 			dict(d, type='email') for d in
-			TemplateEmail.get(req['body']['_id'], index='template', raw=True)
+			TemplateEmail.filter({
+				'template': req['body']['_id']
+			}, raw=True)
 		])
 
 		# Find all associated sms content
 		dTemplate['content'].extend([
 			dict(d, type='sms') for d in
-			TemplateSMS.get(req['body']['_id'], index='template', raw=True)
+			TemplateSMS.filter({
+				'template': req['body']['_id']
+			}, raw=True)
 		])
 
 		# If there's content
@@ -629,18 +843,18 @@ class Mouth(Services.Service):
 		"""
 
 		# Make sure the client has access via the session
-		access.verify(req['session'], 'mouth_template', access.UPDATE)
+		body.access.verify(req['session'], 'mouth_template', body.access.UPDATE)
 
 		# Check for ID
 		if '_id' not in req['body']:
-			return Services.Error(errors.BODY_FIELD, (('_id', 'missing')))
+			return Services.Error(body.errors.BODY_FIELD, [['_id', 'missing']])
 
 		# Find the record
 		oTemplate = Template.get(req['body']['_id'])
 
 		# If it doesn't exist
 		if not oTemplate:
-			return Services.Error(errors.DB_NO_RECORD, (req['body']['_id'], 'template'))
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['_id'], 'template'))
 
 		# Remove fields that can't be updated
 		for k in ['_id', '_created', '_updated']:
@@ -667,7 +881,58 @@ class Mouth(Services.Service):
 				oTemplate.save()
 			)
 		except Record_Base.DuplicateException as e:
-			return Services.Error(errors.DB_DUPLICATE, (req['body']['name'], 'template'))
+			return Services.Error(body.errors.DB_DUPLICATE, (req['body']['name'], 'template'))
+
+	def template_contents_read(self, req):
+		"""Template Contents read
+
+		Returns all the content records for a single template
+
+		Arguments:
+			req (dict): The request data: body, session, and environment
+
+		Returns:
+			Services.Response
+		"""
+
+		# Make sure the client has access via the session
+		body.access.verify(req['session'], 'mouth_content', body.access.READ)
+
+		# If 'template' is missing
+		if 'template' not in req['body']:
+			return Services.Error(body.errors.BODY_FIELD, [['template', 'missing']])
+
+		# If the template doesn't exist
+		if not Template.exists(req['body']['template']):
+			return Services.Error(body.errors.DB_NO_RECORD, [req['body']['template'], 'template'])
+
+		# Init the list of content
+		lContents = []
+
+		# Find all associated email content
+		lContents.extend([
+			dict(d, type='email') for d in
+			TemplateEmail.filter({
+				'template': req['body']['template']
+			}, raw=True)
+		])
+
+		# Find all associated sms content
+		lContents.extend([
+			dict(d, type='sms') for d in
+			TemplateSMS.filter({
+				'template': req['body']['template']
+			}, raw=True)
+		])
+
+		# If there's content
+		if len(lContents) > 1:
+
+			# Sort it by locale and type
+			lContents.sort(key=itemgetter('locale', 'type'))
+
+		# Return the template
+		return Services.Response(lContents)
 
 	def template_email_create(self, req):
 		"""Template Email create
@@ -682,26 +947,26 @@ class Mouth(Services.Service):
 		"""
 
 		# Make sure the client has access via the session
-		access.verify(req['session'], 'mouth_content', access.CREATE)
+		body.access.verify(req['session'], 'mouth_content', body.access.CREATE)
 
 		# Check minimum fields
 		try: DictHelper.eval(req['body'], ['template', 'locale'])
-		except ValueError as e: return Services.Error(errors.BODY_FIELD, ((f, 'missing') for f in e.args))
+		except ValueError as e: return Services.Error(body.errors.BODY_FIELD, [[f, 'missing'] for f in e.args])
 
 		# Make sure the template exists
 		dTemplate = Template.get(req['body']['template'], raw=['variables'])
 		if not dTemplate:
-			return Services.Error(errors.DB_NO_RECORD, (req['body']['template'], 'template'))
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['template'], 'template'))
 
 		# Make sure the locale exists
 		if not Locale.exists(req['body']['locale']):
-			return Services.Error(errors.DB_NO_RECORD, (req['body']['locale'], 'locale'))
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['locale'], 'locale'))
 
 		# Verify the instance
 		try:
 			oEmail = TemplateEmail(req['body'])
 		except ValueError as e:
-			return Services.Error(errors.BODY_FIELD, e.args[0])
+			return Services.Error(body.errors.BODY_FIELD, e.args[0])
 
 		# Check content for errors
 		lErrors = self._checkTemplateContent(
@@ -712,13 +977,13 @@ class Mouth(Services.Service):
 
 		# If there's any errors
 		if lErrors:
-			return Services.Error(TEMPLATE_CONTENT_ERROR, lErrors)
+			return Services.Error(errors.TEMPLATE_CONTENT_ERROR, lErrors)
 
 		# Create the record
 		try:
 			oEmail.create()
 		except Record_Base.DuplicateException as e:
-			return Services.Error(errors.DB_DUPLICATE, (req['body']['locale'], 'template_locale'))
+			return Services.Error(body.errors.DB_DUPLICATE, (req['body']['locale'], 'template_locale'))
 
 		# Return the ID to indicate OK
 		return Services.Response(oEmail['_id'])
@@ -736,18 +1001,18 @@ class Mouth(Services.Service):
 		"""
 
 		# Make sure the client has access via the session
-		access.verify(req['session'], 'mouth_content', access.DELETE)
+		body.access.verify(req['session'], 'mouth_content', body.access.DELETE)
 
 		# If the ID is missing
 		if '_id' not in req['body']:
-			return Services.Error(errors.BODY_FIELD, (('_id', 'missing')))
+			return Services.Error(body.errors.BODY_FIELD, [['_id', 'missing']])
 
 		# Find the record
 		oEmail = TemplateEmail.get(req['body']['_id'])
 
 		# If it doesn't exist
 		if not oEmail:
-			return Services.Error(errors.DB_NO_RECORD, (req['body']['_id'], 'template_email'))
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['_id'], 'template_email'))
 
 		# Delete the record and return the result
 		return Services.Response(
@@ -767,18 +1032,18 @@ class Mouth(Services.Service):
 		"""
 
 		# Make sure the client has access via the session
-		access.verify(req['session'], 'mouth_content', access.UPDATE)
+		body.access.verify(req['session'], 'mouth_content', body.access.UPDATE)
 
 		# If the ID is missing
 		if '_id' not in req['body']:
-			return Services.Error(errors.BODY_FIELD, (('_id', 'missing')))
+			return Services.Error(body.errors.BODY_FIELD, [['_id', 'missing']])
 
 		# Find the record
 		oEmail = TemplateEmail.get(req['body']['_id'])
 
 		# If it doesn't exist
 		if not oEmail:
-			return Services.Error(errors.DB_NO_RECORD, (req['body']['_id'], 'template_email'))
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['_id'], 'template_email'))
 
 		# Remove fields that can't be updated
 		for k in ['_id', '_created', '_updated', 'template', 'locale']:
@@ -801,7 +1066,7 @@ class Mouth(Services.Service):
 
 		# If there's any errors
 		if lErrors:
-			return Services.Error(errors.BODY_FIELD, lErrors)
+			return Services.Error(body.errors.BODY_FIELD, lErrors)
 
 		# Find the primary template variables
 		dTemplate = Template.get(oEmail['template'], raw=['variables'])
@@ -815,15 +1080,15 @@ class Mouth(Services.Service):
 
 		# If there's any errors
 		if lErrors:
-			return Services.Error(TEMPLATE_CONTENT_ERROR, lErrors)
+			return Services.Error(errors.TEMPLATE_CONTENT_ERROR, lErrors)
 
 		# Save the record and return the result
 		return Services.Response(
 			oEmail.save()
 		)
 
-	def template_generate_read(self, req):
-		"""Template Generate read
+	def template_email_generate_read(self, req):
+		"""Template Email Generate read
 
 		Generates a template from the base variable data for the purposes of
 		testing / validating
@@ -836,28 +1101,28 @@ class Mouth(Services.Service):
 		"""
 
 		# Make sure the client has access via the session
-		access.verify(req['session'], 'mouth_content', access.READ)
+		body.access.verify(req['session'], 'mouth_content', body.access.READ)
 
 		# Check minimum fields
-		try: DictHelper.eval(req['body'], ['template', 'locale', 'content'])
-		except ValueError as e: return Services.Error(errors.BODY_FIELD, ((f, 'missing') for f in e.args))
+		try: DictHelper.eval(req['body'], ['template', 'locale', 'subject', 'text', 'html'])
+		except ValueError as e: return Services.Error(body.errors.BODY_FIELD, [[f, 'missing'] for f in e.args])
 
 		# Find the template variables
 		dTemplate = Template.get(req['body']['template'], raw=['variables'])
 		if not dTemplate:
-			return Services.Error(errors.DB_NO_RECORD, (req['body']['template'], 'template'))
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['template'], 'template'))
 
 		# If the locale doesn't exist
 		if not Locale.exists(req['body']['locale']):
-			return Services.Error(errors.DB_NO_RECORD, (req['body']['locale'], 'locale'))
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['locale'], 'locale'))
 
 		# Generate the template and return it
 		return Services.Response(
-			self._generateTemplate(
-				req['body']['content'],
-				req['body']['locale'],
-				dTemplate['variables']
-			)
+			self._generate_email({
+				'subject': req['body']['subject'],
+				'text': req['body']['text'],
+				'html': req['body']['html']
+			}, req['body']['locale'], dTemplate['variables'])
 		)
 
 	def template_sms_create(self, req):
@@ -873,26 +1138,26 @@ class Mouth(Services.Service):
 		"""
 
 		# Make sure the client has access via the session
-		access.verify(req['session'], 'mouth_content', access.CREATE)
+		body.access.verify(req['session'], 'mouth_content', body.access.CREATE)
 
 		# Check minimum fields
 		try: DictHelper.eval(req['body'], ['template', 'locale'])
-		except ValueError as e: return Services.Error(errors.BODY_FIELD, ((f, 'missing') for f in e.args))
+		except ValueError as e: return Services.Error(body.errors.BODY_FIELD, [[f, 'missing'] for f in e.args])
 
 		# Make sure the template exists
 		dTemplate = Template.get(req['body']['template'], raw=['variables'])
 		if not dTemplate:
-			return Services.Error(errors.DB_NO_RECORD, (req['body']['template'], 'template'))
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['template'], 'template'))
 
 		# Make sure the locale exists
 		if not Locale.exists(req['body']['locale']):
-			return Services.Error(errors.DB_NO_RECORD, (req['body']['locale'], 'locale'))
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['locale'], 'locale'))
 
 		# Verify the instance
 		try:
 			oSMS = TemplateSMS(req['body'])
 		except ValueError as e:
-			return Services.Error(errors.BODY_FIELD, e.args[0])
+			return Services.Error(body.errors.BODY_FIELD, e.args[0])
 
 		# Check content for errors
 		lErrors = self._checkTemplateContent(
@@ -903,13 +1168,13 @@ class Mouth(Services.Service):
 
 		# If there's any errors
 		if lErrors:
-			return Services.Error(TEMPLATE_CONTENT_ERROR, lErrors)
+			return Services.Error(errors.TEMPLATE_CONTENT_ERROR, lErrors)
 
 		# Create the record
 		try:
 			oSMS.create()
 		except Record_Base.DuplicateException as e:
-			return Services.Error(errors.DB_DUPLICATE, (req['body']['locale'], 'template_locale'))
+			return Services.Error(body.errors.DB_DUPLICATE, (req['body']['locale'], 'template_locale'))
 
 		# Return the ID to indicate OK
 		return Services.Response(oSMS['_id'])
@@ -927,18 +1192,18 @@ class Mouth(Services.Service):
 		"""
 
 		# Make sure the client has access via the session
-		access.verify(req['session'], 'mouth_content', access.DELETE)
+		body.access.verify(req['session'], 'mouth_content', body.access.DELETE)
 
 		# If the ID is missing
 		if '_id' not in req['body']:
-			return Services.Error(errors.BODY_FIELD, (('_id', 'missing')))
+			return Services.Error(body.errors.BODY_FIELD, [['_id', 'missing']])
 
 		# Find the record
 		oSMS = TemplateSMS.get(req['body']['_id'])
 
 		# If it doesn't exist
 		if not oSMS:
-			return Services.Error(errors.DB_NO_RECORD, (req['body']['_id'], 'template_sms'))
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['_id'], 'template_sms'))
 
 		# Delete the record and return the result
 		return Services.Response(
@@ -958,24 +1223,24 @@ class Mouth(Services.Service):
 		"""
 
 		# Make sure the client has access via the session
-		access.verify(req['session'], 'mouth_content', access.UPDATE)
+		body.access.verify(req['session'], 'mouth_content', body.access.UPDATE)
 
 		# Check minimum fields
 		try: DictHelper.eval(req['body'], ['_id', 'content'])
-		except ValueError as e: return Services.Error(errors.BODY_FIELD, ((f, 'missing') for f in e.args))
+		except ValueError as e: return Services.Error(body.errors.BODY_FIELD, [[f, 'missing'] for f in e.args])
 
 		# Find the record
 		oSMS = TemplateSMS.get(req['body']['_id'])
 
 		# If it doesn't exist
 		if not oSMS:
-			return Services.Error(errors.DB_NO_RECORD, (req['body']['_id'], 'template_sms'))
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['_id'], 'template_sms'))
 
 		# Update the content
 		try:
 			oSMS['content'] = req['body']['content']
 		except ValueError as e:
-			return Services.Error(errors.BODY_FIELD, [e.args[0]])
+			return Services.Error(body.errors.BODY_FIELD, [e.args[0]])
 
 		# Find the primary template variables
 		dTemplate = Template.get(oSMS['template'], raw=['variables'])
@@ -989,9 +1254,67 @@ class Mouth(Services.Service):
 
 		# If there's any errors
 		if lErrors:
-			return Services.Error(TEMPLATE_CONTENT_ERROR, lErrors)
+			return Services.Error(errors.TEMPLATE_CONTENT_ERROR, lErrors)
 
 		# Save the record and return the result
 		return Services.Response(
 			oSMS.save()
+		)
+
+	def template_sms_generate_read(self, req):
+		"""Template SMS Generate read
+
+		Generates a template from the base variable data for the purposes of
+		testing / validating
+
+		Arguments:
+			req (dict): The request data: body, session, and environment
+
+		Returns:
+			Services.Response
+		"""
+
+		# Make sure the client has access via the session
+		body.access.verify(req['session'], 'mouth_content', body.access.READ)
+
+		# Check minimum fields
+		try: DictHelper.eval(req['body'], ['template', 'locale', 'content'])
+		except ValueError as e: return Services.Error(body.errors.BODY_FIELD, [[f, 'missing'] for f in e.args])
+
+		# Find the template variables
+		dTemplate = Template.get(req['body']['template'], raw=['variables'])
+		if not dTemplate:
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['template'], 'template'))
+
+		# If the locale doesn't exist
+		if not Locale.exists(req['body']['locale']):
+			return Services.Error(body.errors.DB_NO_RECORD, (req['body']['locale'], 'locale'))
+
+		# Generate the template and return it
+		return Services.Response(
+			self._generate_sms(
+				req['body']['content'],
+				req['body']['locale'],
+				dTemplate['variables']
+			)
+		)
+
+	def templates_read(self, req):
+		"""Templates read
+
+		Returns all templates in the system
+
+		Arguments:
+			req (dict): The request data: body, session, and environment
+
+		Returns:
+			Services.Response
+		"""
+
+		# Make sure the client has access via the session
+		body.access.verify(req['session'], 'mouth_template', body.access.READ)
+
+		# Fetch and return all templates
+		return Services.Response(
+			Template.get(raw=True)
 		)

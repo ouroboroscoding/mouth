@@ -15,11 +15,21 @@
 		"collate": "utf8mb4_unicode_ci"
 	},
 
+	"__ui__": {
+		"copyPrimary": false,
+		"create": ["_id", "name"],
+		"results": ["_id", "name"],
+		"update": ["name"]
+	},
+
 	"__name__": "Mouth_Locale",
 
 	"_id": {
 		"__type__": "string",
 		"__regex__": "^[a-z]{2}-[A-Z]{2}$",
+		"__ui__": {
+			"title": "ID"
+		},
 		"__sql__": {
 			"type": "char(5)"
 		}

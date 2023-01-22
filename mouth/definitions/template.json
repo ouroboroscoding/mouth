@@ -51,7 +51,7 @@
 		},
 		"__type__": "string",
 		"__sql__": {
-			"type": "json"
+			"json": true
 		}
 	}
 }

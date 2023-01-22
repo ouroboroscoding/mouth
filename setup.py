@@ -20,6 +20,7 @@ setup(
 	author_email='chris@ouroboroscoding.com',
 	license='Custom',
 	packages=['mouth'],
+	package_data={'mouth': ['definitions/*.json']},
 	python_requires='>=3.10',
 	install_requires=['Rest-OC==1.0.0', 'Body-OC==0.0.1'],
 	entry_points={

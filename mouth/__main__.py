@@ -32,20 +32,11 @@ def cli():
 		uint
 	"""
 
-	# Call the initial setup
-	setup()
-
-	# Init the email module
-	EMail.init(Conf.get('email', {
-		'from': 'admin@localhost',
-		'smtp': {
-			'host': 'localhost',
-			'port': 587,
-			'tls': True,
-			'user': 'noone',
-			'passwd': 'nopasswd'
-		}
-	}))
+	# Load the config
+	Conf.load('config.json')
+	sConfOverride = 'config.%s.json' % platform.node()
+	if os.path.isfile(sConfOverride):
+		Conf.load_merge(sConfOverride)
 
 	# Add the global prepend
 	Record_MySQL.db_prepend(Conf.get(('mysql', 'prepend'), ''))
@@ -59,7 +50,23 @@ def cli():
 		'passwd': ''
 	}))
 
-	# Get redis primary config
+	# If we are installing
+	if len(sys.argv) > 1 and sys.argv[1] == 'install':
+		return install()
+
+	# Init the email module
+	EMail.init(Conf.get('email', {
+		'from': 'admin@localhost',
+		'smtp': {
+			'host': 'localhost',
+			'port': 587,
+			'tls': True,
+			'user': 'noone',
+			'passwd': 'nopasswd'
+		}
+	}))
+
+	# Get redis session config
 	dRedis = Conf.get(('redis', 'session'), {
 		'host': 'localhost',
 		'port': 6379,
@@ -116,9 +123,12 @@ def cli():
 		'/sms': {'methods': REST.CREATE},
 
 		'/template': {'methods': REST.ALL, 'session': True},
+		'/template/contents': {'methods': REST.READ, 'session': True},
 		'/template/email': {'methods': REST.CREATE | REST.UPDATE | REST.DELETE, 'session': True},
-		'/template/generate': {'methods': REST.READ},
-		'/template/sms': {'methods': REST.CREATE | REST.UPDATE | REST.DELETE, 'session': True}
+		'/template/email/generate': {'methods': REST.READ, 'session': True},
+		'/template/sms': {'methods': REST.CREATE | REST.UPDATE | REST.DELETE, 'session': True},
+		'/template/sms/generate': {'methods': REST.READ, 'session': True},
+		'/templates': {'methods': REST.READ, 'session': True}
 
 		},
 		'mouth',
@@ -137,46 +147,18 @@ def cli():
 def install():
 	"""Install
 
-	Installs tables and records needed
+	Installs required files, tables, records, etc. for the service
 
-	Returns
-		uint
+	Returns:
+		int
 	"""
-
-	# Call the initial setup
-	setup()
 
 	# Install tables
 	records.install()
 
-def setup():
-	"""Setup
-
-	Shared setup code
-
-	Returns:
-		None
-	"""
-
-	# Load the config
-	Conf.load('config.json')
-	sConfOverride = 'config.%s.json' % platform.node()
-	if os.path.isfile(sConfOverride):
-		Conf.load_merge(sConfOverride)
-
-	# Add the global prepend
-	Record_MySQL.db_prepend(Conf.get(('mysql', 'prepend'), ''))
-
-	# Add the primary mysql DB
-	Record_MySQL.add_host('primary', Conf.get(('mysql', 'hosts', 'mouth')))
+	# Return OK
+	return 0
 
 # Only run if called directly
 if __name__ == '__main__':
-
-	if len(sys.argv) > 1 and sys.argv[1] == 'install':
-		iRet = install()
-
-	else:
-		iRet = cli()
-
-	sys.exit(iRet)
+	sys.exit(cli())

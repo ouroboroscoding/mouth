@@ -53,6 +53,10 @@
 
 	"content": {
 		"__type__": "string",
-		"__maximum__": 65535
+		"__maximum__": 65535,
+		"__ui__": {
+			"title": "Content",
+			"type": "textarea"
+		}
 	}
 }

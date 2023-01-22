@@ -59,11 +59,19 @@
 
 	"text": {
 		"__type__": "string",
-		"__maximum__": 65535
+		"__maximum__": 65535,
+		"__ui__": {
+			"title": "Plain Text",
+			"type": "textarea"
+		}
 	},
 
 	"html": {
 		"__type__": "string",
-		"__maximum__": 65535
+		"__maximum__": 65535,
+		"__ui__": {
+			"title": "HTML",
+			"type": "textarea"
+		}
 	}
 }
