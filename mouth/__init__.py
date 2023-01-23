@@ -97,7 +97,7 @@ class Mouth(Services.Service):
 				# Get the missing templates
 				for s in lsTemplates:
 					if s not in lTemplates:
-						lErrors.add[['template', s]]
+						lErrors.append(['template', s])
 
 		# If there's any variables
 		if lsVariables:
@@ -107,7 +107,7 @@ class Mouth(Services.Service):
 
 				# If it's not in the templates list
 				if s not in variables:
-					lErrors.add[['variable', s]]
+					lErrors.append(['variable', s])
 
 		# Return errors (might be empty)
 		return lErrors
@@ -981,7 +981,7 @@ class Mouth(Services.Service):
 
 		# Create the record
 		try:
-			oEmail.create()
+			oEmail.create(changes={'user': req['session']['user']['_id']})
 		except Record_Base.DuplicateException as e:
 			return Services.Error(body.errors.DB_DUPLICATE, (req['body']['locale'], 'template_locale'))
 
@@ -1016,7 +1016,7 @@ class Mouth(Services.Service):
 
 		# Delete the record and return the result
 		return Services.Response(
-			oEmail.delete()
+			oEmail.delete(changes={'user': req['session']['user']['_id']})
 		)
 
 	def template_email_update(self, req):
@@ -1084,7 +1084,7 @@ class Mouth(Services.Service):
 
 		# Save the record and return the result
 		return Services.Response(
-			oEmail.save()
+			oEmail.save(changes={'user': req['session']['user']['_id']})
 		)
 
 	def template_email_generate_read(self, req):
@@ -1172,7 +1172,7 @@ class Mouth(Services.Service):
 
 		# Create the record
 		try:
-			oSMS.create()
+			oSMS.create(changes={'user': req['session']['user']['_id']})
 		except Record_Base.DuplicateException as e:
 			return Services.Error(body.errors.DB_DUPLICATE, (req['body']['locale'], 'template_locale'))
 
@@ -1207,7 +1207,7 @@ class Mouth(Services.Service):
 
 		# Delete the record and return the result
 		return Services.Response(
-			oSMS.delete()
+			oSMS.delete(changes={'user': req['session']['user']['_id']})
 		)
 
 	def template_sms_update(self, req):
@@ -1258,7 +1258,7 @@ class Mouth(Services.Service):
 
 		# Save the record and return the result
 		return Services.Response(
-			oSMS.save()
+			oSMS.save(changes={'user': req['session']['user']['_id']})
 		)
 
 	def template_sms_generate_read(self, req):
