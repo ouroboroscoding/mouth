@@ -6,7 +6,7 @@
 			"_created", "_updated", "name", "variables"
 		],
 		"db": "mouth",
-		"host": "primary",
+		"host": "mouth",
 		"indexes": {
 			"name": {"unique": null}
 		},

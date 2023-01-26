@@ -6,7 +6,7 @@
 			"_created", "_updated", "template", "locale", "content"
 		],
 		"db": "mouth",
-		"host": "primary",
+		"host": "mouth",
 		"indexes": {
 			"template_locale": {"unique": ["template", "locale"]}
 		},

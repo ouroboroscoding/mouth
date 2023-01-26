@@ -5,7 +5,7 @@
 			"_archived", "_created", "name"
 		],
 		"db": "mouth",
-		"host": "primary",
+		"host": "mouth",
 		"indexes": {
 			"name": {"unique": null}
 		},

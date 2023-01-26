@@ -18,7 +18,9 @@ import re
 
 # Pip imports
 import body
-from RestOC import	DictHelper, Record_Base, Services, SMTP, StrHelper
+from RestOC import Conf, DictHelper, Record_Base, Services, SMTP, StrHelper
+from twilio.rest import Client
+from twilio.base.exceptions import TwilioRestException
 
 # Records imports
 from mouth.records import Locale, Template, TemplateEmail, TemplateSMS
@@ -118,7 +120,7 @@ class Mouth(Services.Service):
 		Handles the actual sending of the email
 
 		Arguments:
-			opts (dict): The options
+			opts (dict): The options used to generate and send the email
 
 		Returns:
 			Services.Response
@@ -126,93 +128,62 @@ class Mouth(Services.Service):
 
 		# If the from is not set
 		if 'from' not in opts:
-			opts['from'] = self.emailConf['from']
+			opts['from'] = self._dEmail['from']
 
-		# If we got a _queue_ value
-		if '_queue_' in opts:
+		# Init the attachments var
+		mAttachments = None
 
-			# Store it
-			sQueueKey = opts.pop('_queue_')
+		# If there's an attachment
+		if 'attachments' in opts:
 
-			# If it's not valid
-			if not self._queue_key(opts, sQueueKey):
-				return Services.Error(body.errors.BODY_FIELD)
+			# Make sure it's a list
+			if not isinstance(opts['attachments'], (list,tuple)):
+				opts['attachments'] = [opts['attachments']]
 
-			# Else, we're good
-			opts['_queue_'] = True
+			# Loop through the attachments
+			for i in range(len(opts['attachments'])):
 
-		# If we are sending direct, or we got a valid request from the queue
-		if self.emailConf['method'] == 'direct' or '_queue_' in opts:
+				# If we didn't get a dictionary
+				if not isinstance(opts['attachments'][i], dict):
+					return Services.Error(errors.ATTACHMENT_STRUCTURE, 'attachments.[%d]' % i)
 
-			# Init the attachments var
-			mAttachments = None
+				# If the fields are missing
+				try:
+					DictHelper.eval(opts['attachments'][i], ['body', 'filename'])
+				except ValueError as e:
+					return Services.Error(body.errors.BODY_FIELD, [['attachments.[%d].%s' % (i, s), 'invalid'] for s in e.args])
 
-			# If there's an attachment
-			if 'attachments' in opts:
+				# Try to decode the base64
+				try:
+					opts['attachments'][i]['body'] = b64decode(opts['attachments'][i]['body'])
+				except TypeError:
+					return Services.Response(errors.ATTACHMENT_DECODE)
 
-				# Make sure it's a list
-				if not isinstance(opts['attachments'], (list,tuple)):
-					opts['attachments'] = [opts['attachments']]
+			# Set the attachments from the opts
+			mAttachments = opts['attachments']
 
-				# Loop through the attachments
-				for i in range(len(opts['attachments'])):
+		# Only send if anyone is allowed, or the to is in the allowed
+		if not self._dEmail['allowed'] or opts['to'] in self._dEmail['allowed']:
 
-					# If we didn't get a dictionary
-					if not isinstance(opts['attachments'][i], dict):
-						return Services.Error(errors.ATTACHMENT_STRUCTURE, 'attachments.[%d]' % i)
+			# Send the e-mail
+			iRes = SMTP.send(
+				'override' in self._dEmail and self._dEmail['override'] or opts['to'],
+				subject=opts['subject'],
+				text_body=opts['text'],
+				html_body=opts['html'],
+				from_=opts['from'],
+				attachments=mAttachments
+			)
 
-					# If the fields are missing
-					try:
-						DictHelper.eval(opts['attachments'][i], ['body', 'filename'])
-					except ValueError as e:
-						return Services.Error(body.errors.BODY_FIELD, [['attachments.[%d].%s' % (i, s), 'invalid'] for s in e.args])
-
-					# Try to decode the base64
-					try:
-						opts['attachments'][i]['body'] = b64decode(opts['attachments'][i]['body'])
-					except TypeError:
-						return Services.Response(errors.ATTACHMENT_DECODE)
-
-				# Set the attachments from the opts
-				mAttachments = opts['attachments']
-
-			# Only send if anyone is allowed, or the to is in the allowed
-			if not self.emailConf['allowed'] or opts['to'] in self.emailConf['allowed']:
-
-				# Send the e-mail
-				iRes = SMTP.send(
-					opts['to'], opts['subject'],
-					text_body=opts['text_body'],
-					html_body=opts['html_body'],
-					from_=opts['from'],
-					attachments=mAttachments
-				)
-
-				# If there was an error
-				if iRes != SMTP.OK:
-					return Services.Error(errors.SMTP_ERROR, '%i %s' % (iRes, SMTP.lastError()))
-
-		# Else, we are sending to the queue first
-		else:
-
-			# Add a queue key to the data
-			opts['_queue_'] = self._queue_key(opts)
-
-			# Send the data to the queue service
-			oResponse = Services.create('queue', 'msg', {'body': {
-				'_internal_': Services.internalKey(),
-				'service': 'communication',
-				'path': 'email/text',
-				'method': 'create',
-				'data': opts
-			}})
-
-			# Return if there's an error
-			if oResponse.error_exists():
-				return oResponse
+			# If there was an error
+			if iRes != SMTP.OK:
+				return {
+					'success': False,
+					'error': '%i %s' % (iRes, SMTP.lastError())
+				}
 
 		# Return OK
-		return Services.Response(True)
+		return {'success': True}
 
 	@classmethod
 	def _generate_email(cls, content, locale, variables, templates=None):
@@ -450,6 +421,54 @@ class Mouth(Services.Service):
 			# Generate and return a key
 			return StrHelper.encrypt(self._queue_key, sMD5)
 
+	def _sms(self, opts):
+		"""SMS
+
+		Sends an SMS using twilio
+
+		Arguments:
+			opts (dict): The options used to generate and send the SMS
+
+		Returns:
+			Services.Response
+		"""
+
+		# Only send if anyone is allowed, or the to is in the allowed
+		if not self._dSMS['allowed'] or opts['to'] in self._dSMS['allowed']:
+
+			# Init the base arguments
+			dArgs = {
+				'to': 'override' in self._dSMS and self._dSMS['override'] or opts['to'],
+				'body': opts['content']
+			}
+
+			# If we are using a service
+			if 'messaging_sid' in self._dSMS['twilio']:
+				dArgs['messaging_service_sid'] = self._dSMS['twilio']['messaging_sid']
+
+			# Else, use a phone number
+			else:
+				dArgs['from_'] = self._dSMS['twilio']['from_number']
+
+			# Try to send the message via Twilio
+			try:
+				dRes = self._oTwilio.messages.create(**dArgs)
+
+				# Return ok
+				return {
+					"success": True,
+					"sid": dRes.sid
+				}
+
+			# Catch any Twilio exceptions
+			except TwilioRestException as e:
+
+				# Return failure
+				return {
+					"success": False,
+					"error": [v for v in e.args]
+				}
+
 	def email_create(self, req):
 		"""E-Mail
 
@@ -478,7 +497,9 @@ class Mouth(Services.Service):
 			except ValueError as e: return Services.Error(body.errors.BODY_FIELD, [['template.%s' % f, 'missing'] for f in e.args])
 
 			# Find the template by name
-			dTemplate = Template.get(req['body']['template']['name'], index='name', raw=['_id'])
+			dTemplate = Template.filter({
+				'name': req['body']['template']['name']
+			}, raw=['_id'], limit=1)
 			if not dTemplate:
 				return Services.Error(body.errors.DB_NO_RECORD, [req['body']['template']['name'], 'template'])
 
@@ -497,6 +518,8 @@ class Mouth(Services.Service):
 				req['body']['template']['variables']
 			)
 
+			print(dContent)
+
 		# Else, if we recieved content
 		elif 'content' in req['body']:
 			dContent = req['body']['content']
@@ -506,12 +529,14 @@ class Mouth(Services.Service):
 			return Services.Error(body.errors.BODY_FIELD, [['content', 'missing']])
 
 		# Send the email and return the response
-		return self._email({
-			'to': req['body']['to'],
-			'subject': dContent['subject'],
-			'text_body': dContent['text'],
-			'html_body': dContent['body']
-		})
+		return Services.Response(
+			self._email({
+				'to': req['body']['to'],
+				'subject': dContent['subject'],
+				'text': dContent['text'],
+				'html': dContent['html']
+			})
+		)
 
 	def sms_create(self, req):
 		"""SMS
@@ -525,8 +550,58 @@ class Mouth(Services.Service):
 		Returns:
 			Services.Response
 		"""
-		pass
 
+		# Check for internal key
+		body.access.internal(req['body'])
+
+		# Make sure that at minimum, we have a to field
+		if 'to' not in req['body']:
+			return Services.Error(body.errors.BODY_FIELD, [['to', 'missing']])
+
+		# If we received a template field
+		if 'template' in req['body']:
+
+			# Check minimum fields
+			try: DictHelper.eval(req['body']['template'], ['name', 'locale', 'variables'])
+			except ValueError as e: return Services.Error(body.errors.BODY_FIELD, [['template.%s' % f, 'missing'] for f in e.args])
+
+			# Find the template by name
+			dTemplate = Template.filter({
+				'name': req['body']['template']['name']
+			}, raw=['_id'], limit=1)
+			if not dTemplate:
+				return Services.Error(body.errors.DB_NO_RECORD, [req['body']['template']['name'], 'template'])
+
+			# Find the content by locale
+			dContent = TemplateSMS.filter({
+				'template': dTemplate['_id'],
+				'locale': req['body']['template']['locale']
+			}, raw=['content'], limit=1)
+			if not dContent:
+				return Services.Error(body.errors.DB_NO_RECORD, ['%s.%s' % (dTemplate['_id'], req['body']['template']['locale']), 'template'])
+
+			# Generate the rendered content
+			sContent = self._generate_sms(
+				dContent['content'],
+				req['body']['template']['locale'],
+				req['body']['template']['variables']
+			)
+
+		# Else, if we recieved content
+		elif 'content' in req['body']:
+			sContent = req['body']['content']
+
+		# Else, nothing to send
+		else:
+			return Services.Error(body.errors.BODY_FIELD, [['content', 'missing']])
+
+		# Send the sms and return the response
+		return Services.Response(
+			self._sms({
+				'to': req['body']['to'],
+				'content': sContent
+			})
+		)
 
 	def initialise(self):
 		"""Initialise
@@ -536,6 +611,45 @@ class Mouth(Services.Service):
 		Returns:
 			Authorization
 		"""
+
+		# Fetch and store Email config
+		dDefault = {
+			'allowed': None,
+			'errors': 'webmaster@localhost',
+			'from': 'support@localehost',
+			'method': 'direct',
+			'override': None
+		}
+		self._dEmail = Conf.get('email', dDefault)
+		for k in dDefault.keys():
+			if k not in self._dEmail:
+				self._dEmail[k] = dDefault[k]
+
+		# Fetch and store SMS config
+		dDefault = {
+			'active': False,
+			'allowed': None,
+			'method': 'direct',
+			'override': None,
+			'twilio': {
+				'account_sid': '',
+				'token': '',
+				'from_number': ''
+			}
+		}
+		self._dSMS = Conf.get('sms', dDefault)
+		for k in dDefault.keys():
+			if k not in self._dSMS:
+				self._dSMS[k] = dDefault[k]
+
+		# If SMS is active
+		if self._dSMS['active']:
+
+			# Create Twilio client
+			self._oTwilio = Client(
+				self._dSMS['twilio']['account_sid'],
+				self._dSMS['twilio']['token']
+			)
 
 		# Return self for chaining
 		return self
@@ -878,7 +992,7 @@ class Mouth(Services.Service):
 		# Save the record and return the result
 		try:
 			return Services.Response(
-				oTemplate.save()
+				oTemplate.save(changes={'user': req['session']['user']['_id']})
 			)
 		except Record_Base.DuplicateException as e:
 			return Services.Error(body.errors.DB_DUPLICATE, (req['body']['name'], 'template'))
@@ -1087,8 +1201,8 @@ class Mouth(Services.Service):
 			oEmail.save(changes={'user': req['session']['user']['_id']})
 		)
 
-	def template_email_generate_read(self, req):
-		"""Template Email Generate read
+	def template_email_generate_create(self, req):
+		"""Template Email Generate create
 
 		Generates a template from the base variable data for the purposes of
 		testing / validating
@@ -1261,8 +1375,8 @@ class Mouth(Services.Service):
 			oSMS.save(changes={'user': req['session']['user']['_id']})
 		)
 
-	def template_sms_generate_read(self, req):
-		"""Template SMS Generate read
+	def template_sms_generate_create(self, req):
+		"""Template SMS Generate create
 
 		Generates a template from the base variable data for the purposes of
 		testing / validating

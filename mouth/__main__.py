@@ -38,11 +38,16 @@ def cli():
 	if os.path.isfile(sConfOverride):
 		Conf.load_merge(sConfOverride)
 
+	# Get Brain config
+	dConfig = Conf.get('mouth', {
+		'mysql_host': 'mouth'
+	})
+
 	# Add the global prepend
 	Record_MySQL.db_prepend(Conf.get(('mysql', 'prepend'), ''))
 
 	# Add the primary mysql DB
-	Record_MySQL.add_host('primary', Conf.get(('mysql', 'hosts', 'mouth'), {
+	Record_MySQL.add_host('mouth', Conf.get(('mysql', 'hosts', dConfig['mysql_host']), {
 		'host': 'localhost',
 		'port': 3306,
 		'charset': 'utf8',
@@ -88,7 +93,8 @@ def cli():
 			'workers': 1
 		},
 		'services': {
-			'mouth': {'port': 0}
+			'brain': {'port': 0},
+			'mouth': {'port': 1}
 		}
 	})
 
@@ -125,9 +131,9 @@ def cli():
 		'/template': {'methods': REST.ALL, 'session': True},
 		'/template/contents': {'methods': REST.READ, 'session': True},
 		'/template/email': {'methods': REST.CREATE | REST.UPDATE | REST.DELETE, 'session': True},
-		'/template/email/generate': {'methods': REST.READ, 'session': True},
+		'/template/email/generate': {'methods': REST.CREATE, 'session': True},
 		'/template/sms': {'methods': REST.CREATE | REST.UPDATE | REST.DELETE, 'session': True},
-		'/template/sms/generate': {'methods': REST.READ, 'session': True},
+		'/template/sms/generate': {'methods': REST.CREATE, 'session': True},
 		'/templates': {'methods': REST.READ, 'session': True}
 
 		},

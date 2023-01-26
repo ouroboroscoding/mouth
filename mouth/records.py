@@ -59,7 +59,7 @@ class Locale(Record_MySQL.Record):
 		if not cls._conf:
 			cls._conf = Record_MySQL.Record.generate_config(
 				Tree.fromFile('%s/locale.json' % _defPath),
-				db=Conf.get(('mysql', 'db'), 'mouth')
+				override={'db': Conf.get(('mysql', 'db'), 'mouth')}
 			)
 
 		# Return the config
@@ -91,7 +91,7 @@ class Template(Record_MySQL.Record):
 		if not cls._conf:
 			cls._conf = Record_MySQL.Record.generate_config(
 				Tree.fromFile('%s/template.json' % _defPath),
-				db=Conf.get(('mysql', 'db'), 'mouth')
+				override={'db': Conf.get(('mysql', 'db'), 'mouth')}
 			)
 
 		# Return the config
@@ -123,7 +123,7 @@ class TemplateEmail(Record_MySQL.Record):
 		if not cls._conf:
 			cls._conf = Record_MySQL.Record.generate_config(
 				Tree.fromFile('%s/template_email.json' % _defPath),
-				db=Conf.get(('mysql', 'db'), 'mouth')
+				override={'db': Conf.get(('mysql', 'db'), 'mouth')}
 			)
 
 		# Return the config
@@ -155,7 +155,7 @@ class TemplateSMS(Record_MySQL.Record):
 		if not cls._conf:
 			cls._conf = Record_MySQL.Record.generate_config(
 				Tree.fromFile('%s/template_sms.json' % _defPath),
-				db=Conf.get(('mysql', 'db'), 'mouth')
+				override={'db': Conf.get(('mysql', 'db'), 'mouth')}
 			)
 
 		# Return the config

@@ -22,7 +22,11 @@ setup(
 	packages=['mouth'],
 	package_data={'mouth': ['definitions/*.json']},
 	python_requires='>=3.10',
-	install_requires=['Rest-OC==1.0.0', 'Body-OC==0.0.1'],
+	install_requires=[
+		'Rest-OC==1.0.0',
+		'Body-OC==0.0.1',
+		'twilio==7.16.1'
+	],
 	entry_points={
 		'console_scripts': ['mouth=mouth.__main__:cli']
 	},
