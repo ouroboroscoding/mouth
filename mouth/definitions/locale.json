@@ -5,14 +5,21 @@
 			"_archived", "_created", "name"
 		],
 		"db": "mouth",
-		"host": "primary",
+		"host": "mouth",
 		"indexes": {
 			"name": {"unique": null}
 		},
 		"primary": "_id",
-		"table": "locale",
+		"table": "mouth_locale",
 		"charset": "utf8mb4",
 		"collate": "utf8mb4_unicode_ci"
+	},
+
+	"__ui__": {
+		"copyPrimary": false,
+		"create": ["_id", "name"],
+		"results": ["_id", "name"],
+		"update": ["name"]
 	},
 
 	"__name__": "Mouth_Locale",
@@ -20,6 +27,9 @@
 	"_id": {
 		"__type__": "string",
 		"__regex__": "^[a-z]{2}-[A-Z]{2}$",
+		"__ui__": {
+			"title": "ID"
+		},
 		"__sql__": {
 			"type": "char(5)"
 		}
@@ -34,7 +44,7 @@
 	},
 
 	"_created": {
-		"__type__":"timestamp",
+		"__type__": "timestamp",
 		"__optional__": true,
 		"__sql__": {
 			"opts": "default CURRENT_TIMESTAMP"

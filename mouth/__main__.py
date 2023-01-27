@@ -13,7 +13,7 @@ __created__		= "2022-12-12"
 # Python imports
 import os
 import platform
-from pprint import pformat
+import sys
 
 # Pip imports
 from body import errors
@@ -21,6 +21,7 @@ from RestOC import Conf, EMail, Record_MySQL, REST, Services, Session
 
 # Module imports
 from . import Mouth
+from . import records
 
 def cli():
 	"""CLI
@@ -37,6 +38,27 @@ def cli():
 	if os.path.isfile(sConfOverride):
 		Conf.load_merge(sConfOverride)
 
+	# Get Brain config
+	dConfig = Conf.get('mouth', {
+		'mysql_host': 'mouth'
+	})
+
+	# Add the global prepend
+	Record_MySQL.db_prepend(Conf.get(('mysql', 'prepend'), ''))
+
+	# Add the primary mysql DB
+	Record_MySQL.add_host('mouth', Conf.get(('mysql', 'hosts', dConfig['mysql_host']), {
+		'host': 'localhost',
+		'port': 3306,
+		'charset': 'utf8',
+		'user': 'root',
+		'passwd': ''
+	}))
+
+	# If we are installing
+	if len(sys.argv) > 1 and sys.argv[1] == 'install':
+		return install()
+
 	# Init the email module
 	EMail.init(Conf.get('email', {
 		'from': 'admin@localhost',
@@ -49,19 +71,7 @@ def cli():
 		}
 	}))
 
-	# Add the global prepend
-	Record_MySQL.db_prepend(Conf.get(('mysql', 'prepend'), ''))
-
-	# Add the primary mysql DB
-	Record_MySQL.add_host('primary', Conf.get(('mysql', 'hosts', 'mouth'), {
-		'host': 'localhost',
-		'port': 3306,
-		'charset': 'utf8',
-		'user': 'root',
-		'passwd': ''
-	}))
-
-	# Get redis primary config
+	# Get redis session config
 	dRedis = Conf.get(('redis', 'session'), {
 		'host': 'localhost',
 		'port': 6379,
@@ -73,7 +83,7 @@ def cli():
 	Session.init(dRedis)
 
 	# Get the REST config
-	dRest = Conf.get('rest'), {
+	dRest = Conf.get('rest', {
 		'allowed': 'localhost',
 		'default': {
 			'domain': 'localhost',
@@ -83,9 +93,10 @@ def cli():
 			'workers': 1
 		},
 		'services': {
-			'mouth': {'port': 0}
+			'brain': {'port': 0},
+			'mouth': {'port': 1}
 		}
-	}
+	})
 
 	# Create the REST config instance
 	oRestConf = REST.Config(dRest)
@@ -111,12 +122,19 @@ def cli():
 	# Create the HTTP server and map requests to service
 	REST.Server({
 
+		'/email': {'methods': REST.CREATE},
+
 		'/locale': {'methods': REST.ALL, 'session': True},
 
+		'/sms': {'methods': REST.CREATE},
+
 		'/template': {'methods': REST.ALL, 'session': True},
+		'/template/contents': {'methods': REST.READ, 'session': True},
 		'/template/email': {'methods': REST.CREATE | REST.UPDATE | REST.DELETE, 'session': True},
+		'/template/email/generate': {'methods': REST.CREATE, 'session': True},
 		'/template/sms': {'methods': REST.CREATE | REST.UPDATE | REST.DELETE, 'session': True},
-		'/template/generate': {'methods': REST.READ},
+		'/template/sms/generate': {'methods': REST.CREATE, 'session': True},
+		'/templates': {'methods': REST.READ, 'session': True}
 
 		},
 		'mouth',
@@ -129,6 +147,24 @@ def cli():
 		timeout='timeout' in oRestConf['mouth'] and oRestConf['mouth']['timeout'] or 30
 	)
 
+	# Return OK
+	return 0
+
+def install():
+	"""Install
+
+	Installs required files, tables, records, etc. for the service
+
+	Returns:
+		int
+	"""
+
+	# Install tables
+	records.install()
+
+	# Return OK
+	return 0
+
 # Only run if called directly
 if __name__ == '__main__':
-	cli()
+	sys.exit(cli())

@@ -3,15 +3,15 @@
 		"auto_primary": "UUID()",
 		"changes": ["user"],
 		"create": [
-			"_created", "_updated", "name", "type", "variables"
+			"_created", "_updated", "name", "variables"
 		],
 		"db": "mouth",
-		"host": "primary",
+		"host": "mouth",
 		"indexes": {
 			"name": {"unique": null}
 		},
 		"primary": "_id",
-		"table": "template",
+		"table": "mouth_template",
 		"charset": "utf8mb4",
 		"collate": "utf8mb4_unicode_ci"
 	},
@@ -24,7 +24,7 @@
 	},
 
 	"_created": {
-		"__type__":"timestamp",
+		"__type__": "timestamp",
 		"__optional__": true,
 		"__sql__": {
 			"opts": "default CURRENT_TIMESTAMP"
@@ -32,7 +32,7 @@
 	},
 
 	"_updated": {
-		"__type__":"timestamp",
+		"__type__": "timestamp",
 		"__optional__": true,
 		"__sql__": {
 			"opts": "default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP"
@@ -51,7 +51,7 @@
 		},
 		"__type__": "string",
 		"__sql__": {
-			"type": "json"
+			"json": true
 		}
 	}
 }
