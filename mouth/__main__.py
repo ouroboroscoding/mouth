@@ -61,6 +61,7 @@ def cli():
 
 	# Init the email module
 	EMail.init(Conf.get('email', {
+		'error_to': 'errors@localhost',
 		'from': 'admin@localhost',
 		'smtp': {
 			'host': 'localhost',
