@@ -91,7 +91,9 @@ class Mouth(Services.Service):
 		if lsTemplates:
 
 			# Look for all of them
-			lTemplates = [d['name'] for d in Template.get(list(lsTemplates), raw=['name'])]
+			lTemplates = [d['name'] for d in Template.filter({
+				'name': list(lsTemplates)
+			}, raw=['name'])]
 
 			# If the count doesn't match
 			if len(lTemplates) != len(lsTemplates):
@@ -225,7 +227,9 @@ class Mouth(Services.Service):
 				if sTpl not in templates:
 
 					# Look for the primary template
-					dTemplate = Template.get(sTpl, index='name', raw=['_id'], limit=1)
+					dTemplate = Template.filter({
+						'name': sTpl
+					}, raw=['_id'], limit=1)
 
 					# If it doesn't exist
 					if not dTemplate:
@@ -295,7 +299,9 @@ class Mouth(Services.Service):
 			if sTpl not in templates:
 
 				# Look for the primary template
-				dTemplate = Template.get(sTpl, index='name', raw=['_id'], limit=1)
+				dTemplate = Template.filter({
+					'name': sTpl
+				}, raw=['_id'], limit=1)
 
 				# If it doesn't exist
 				if not dTemplate:
