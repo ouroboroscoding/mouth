@@ -524,8 +524,6 @@ class Mouth(Services.Service):
 				req['body']['template']['variables']
 			)
 
-			print(dContent)
-
 		# Else, if we recieved content
 		elif 'content' in req['body']:
 			dContent = req['body']['content']
@@ -537,7 +535,7 @@ class Mouth(Services.Service):
 		# Send the email and return the response
 		return Services.Response(
 			self._email({
-				'to': req['body']['to'],
+				'to': req['body']['to'].strip(),
 				'subject': dContent['subject'],
 				'text': dContent['text'],
 				'html': dContent['html']
@@ -1436,5 +1434,5 @@ class Mouth(Services.Service):
 
 		# Fetch and return all templates
 		return Services.Response(
-			Template.get(raw=True)
+			Template.get(raw=True, orderby='name')
 		)
