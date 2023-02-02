@@ -34,7 +34,14 @@ class Mouth(Services.Service):
 	Service for outgoing communication
 	"""
 
-	_re_conditional = re.compile(r'\[if:([A-Za-z_]+):(eq|lt|lte|gt|gte|neq):([^\]]+)\](.+?)\[fi\]', re.DOTALL)
+	_special_conditionals = {
+		'$EMPTY': '',
+		'$NULL': None
+	}
+	"""Sepcial conditional values"""
+
+	_re_if = re.compile(r'\[if:([A-Za-z_]+):(eq|lt|lte|gt|gte|neq):([^\]]+)\](.+?)\[fi\]', re.DOTALL)
+	_re_if_else = re.compile(r'\[if:([A-Za-z_]+):(eq|lt|lte|gt|gte|neq):([^\]]+)\](.+?)\[else\](.+?)\[fi\]', re.DOTALL)
 	_re_data = re.compile(r'\{([A-Za-z_]+)\}')
 	_re_tpl = re.compile(r'\#([A-Za-z_]+)\#')
 	"""Regular expressions for parsing/replacing"""
@@ -188,6 +195,123 @@ class Mouth(Services.Service):
 		return {'success': True}
 
 	@classmethod
+	def _generate_content(cls, content, variables):
+		"""Generate Content
+
+		Handles variables and conditionals in template content as it's the same
+		logic for Emails and SMSs
+
+		Arguments:
+			content (str): The content to render
+			variables (dict of str:mixed): The variable names and values
+
+		Returns:
+			str
+		"""
+
+		# Look for variables
+		for sVar in cls._re_data.findall(content):
+
+			# Replace the string with the data value
+			content = content.replace('{%s}' % sVar, sVar in variables and str(variables[sVar]) or '!!!{%s} does not exist!!!' % sVar)
+
+		# Look for if/else conditionals
+		for oConditional in cls._re_if_else.finditer(content):
+
+			# Get the entire text to replace
+			sReplace = oConditional.group(0)
+
+			# Get the conditional parts
+			sVarName, sVarTest, mVarVal, sIfContent, sElseContent = oConditional.groups()
+
+			# Replace special tags in variable value
+			for n,v in cls._special_conditionals.items():
+				if mVarVal == n:
+					mVarVal = v
+
+			# Check for the variable
+			if sVarName not in variables:
+				content = content.replace(sReplace, 'INVALID VARIABLE IN CONDITIONAL')
+				continue
+
+			# If we didn't get None for the value
+			if mVarVal is not None:
+
+				# Get the type of value for the variable
+				oVarType = type(variables[sVarName])
+
+				# Attempt to convert the value from a string if required
+				try:
+
+					# If it's a bool
+					if oVarType == bool:
+						mVarVal = StrHelper.to_bool(mVarVal)
+
+					# Else, if it's not a string
+					elif oVarType != str and oVarType != None:
+						mVarVal = oVarType(mVarVal)
+
+				# If we can't convert the value
+				except ValueError:
+					content = content.replace(sReplace, '!!!%s has invalid value in conditional!!!' % sVarName)
+					continue
+
+			# Figure out if the condition passed or not
+			bPassed = cls._conditional[sVarTest](variables[sVarName], mVarVal)
+
+			# Replace the conditional with the inner text if it passed, else
+			#	just remove it
+			content = content.replace(sReplace, bPassed and sIfContent or sElseContent)
+
+		# Look for if conditionals
+		for oConditional in cls._re_if.finditer(content):
+
+			# Get the entire text to replace
+			sReplace = oConditional.group(0)
+
+			# Get the conditional parts
+			sVarName, sVarTest, mVarVal, sContent = oConditional.groups()
+
+			# Replace special tags in variable value
+			for sSpecial,sReplace in cls._special_conditionals.items():
+				if mVarVal == sSpecial:
+					mVarVal = sReplace
+
+			# Check for the variable
+			if sVarName not in variables:
+				content = content.replace(sReplace, 'INVALID VARIABLE IN CONDITIONAL')
+				continue
+
+			# Get the type of value for the variable
+			oVarType = type(variables[sVarName])
+
+			# Attempt to convert the value from a string if required
+			try:
+
+				# If it's a bool
+				if oVarType == bool:
+					mVarVal = StrHelper.to_bool(mVarVal)
+
+				# Else, if it's not a string
+				elif oVarType != str:
+					mVarVal = oVarType(mVarVal)
+
+			# If we can't convert the value
+			except ValueError:
+				content = content.replace(sReplace, '!!!%s has invalid value in conditional!!!' % sVarName)
+				continue
+
+			# Figure out if the condition passed or not
+			bPassed = cls._conditional[sVarTest](variables[sVarName], mVarVal)
+
+			# Replace the conditional with the inner text if it passed, else
+			#	just remove it
+			content = content.replace(sReplace, bPassed and sContent or '')
+
+		# Return new content
+		return content
+
+	@classmethod
 	def _generate_email(cls, content, locale, variables, templates=None):
 		"""Generate Email
 
@@ -335,70 +459,6 @@ class Mouth(Services.Service):
 		# Return the new contents
 		return content
 
-	@classmethod
-	def _generate_content(cls, content, variables):
-		"""Generate Content
-
-		Handles variables and conditionals in template content as it's the same
-		logic for Emails and SMSs
-
-		Arguments:
-			content (str): The content to render
-			variables (dict of str:mixed): The variable names and values
-
-		Returns:
-			str
-		"""
-
-		# Look for variables
-		for sVar in cls._re_data.findall(content):
-
-			# Replace the string with the data value
-			content = content.replace('{%s}' % sVar, sVar in variables and str(variables[sVar]) or '!!!{%s} does not exist!!!' % sVar)
-
-		# Look for conditionals
-		for oConditional in cls._re_conditional.finditer(content):
-
-			# Get the entire text to replace
-			sReplace = oConditional.group(0)
-
-			# Get the conditional parts
-			sVarName, sVarTest, mVarVal, sContent = oConditional.groups()
-
-			# Check for the variable
-			if sVarName not in variables:
-				content = content.replace(sReplace, 'INVALID VARIABLE IN CONDITIONAL')
-				continue
-
-			# Get the type of value for the variable
-			oVarType = type(variables[sVarName])
-
-			# Attempt to convert the value from a string if required
-			try:
-
-				# If it's a bool
-				if oVarType == bool:
-					mVarVal = StrHelper.to_bool(mVarVal)
-
-				# Else, if it's not a string
-				elif oVarType != str:
-					mVarVal = oVarType(mVarVal)
-
-			# If we can't convert the value
-			except ValueError:
-				content = content.replace(sReplace, '!!!%s has invalid value in conditional!!!' % sVarName)
-				continue
-
-			# Figure out if the condition passed or not
-			bPassed = cls._conditional[sVarTest](variables[sVarName], mVarVal)
-
-			# Replace the conditional with the inner text if it passed, else
-			#	just remove it
-			content = content.replace(sReplace, bPassed and sContent or '')
-
-		# Return new content
-		return content
-
 	def _queue_key(self, data, key=None):
 		"""Queue Key
 
@@ -524,8 +584,6 @@ class Mouth(Services.Service):
 				req['body']['template']['variables']
 			)
 
-			print(dContent)
-
 		# Else, if we recieved content
 		elif 'content' in req['body']:
 			dContent = req['body']['content']
@@ -537,7 +595,7 @@ class Mouth(Services.Service):
 		# Send the email and return the response
 		return Services.Response(
 			self._email({
-				'to': req['body']['to'],
+				'to': req['body']['to'].strip(),
 				'subject': dContent['subject'],
 				'text': dContent['text'],
 				'html': dContent['html']
@@ -1436,5 +1494,5 @@ class Mouth(Services.Service):
 
 		# Fetch and return all templates
 		return Services.Response(
-			Template.get(raw=True)
+			Template.get(raw=True, orderby='name')
 		)
