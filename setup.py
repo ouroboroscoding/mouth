@@ -23,8 +23,8 @@ setup(
 	package_data={'mouth': ['definitions/*.json']},
 	python_requires='>=3.10',
 	install_requires=[
-		'Rest-OC>=1.0.2',
-		'Body-OC>=0.1.1',
+		'Rest-OC>=1.0.3',
+		'Body-OC>=0.1.2',
 		'twilio==7.16.1'
 	],
 	entry_points={
