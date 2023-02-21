@@ -38,21 +38,20 @@ class Mouth(Services.Service):
 		'$EMPTY': '',
 		'$NULL': None
 	}
-	"""Sepcial conditional values"""
+	"""Special conditional values"""
 
-	_re_if = re.compile(r'\[if:([A-Za-z_]+):(eq|lt|lte|gt|gte|neq):([^\]]+)\](.+?)\[fi\]', re.DOTALL)
-	_re_if_else = re.compile(r'\[if:([A-Za-z_]+):(eq|lt|lte|gt|gte|neq):([^\]]+)\](.+?)\[else\](.+?)\[fi\]', re.DOTALL)
+	_re_if_else = re.compile(r'\[[\t ]*if[\t ]+([A-Za-z_]+)(?:[\t ]+(==|<|<=|>|>=|!=)[\t ]+([^\]]+))?[\t ]*\]\n?(.+?)\n?(?:\[[\t ]*else[\t ]*\]\n?(.+?)\n?)?\[[\t ]*fi[\t ]*\]', re.DOTALL)
 	_re_data = re.compile(r'\{([A-Za-z_]+)\}')
 	_re_tpl = re.compile(r'\#([A-Za-z_]+)\#')
 	"""Regular expressions for parsing/replacing"""
 
 	_conditional = {
-		'eq': lambda x, y: x == y,
-		'lt': lambda x, y: x < y,
-		'lte': lambda x, y: x <= y,
-		'gt': lambda x, y: x > y,
-		'gte': lambda x, y: x >= y,
-		'neq': lambda x, y: x != y
+		'==': lambda x, y: x == y,
+		'<': lambda x, y: x < y,
+		'<=': lambda x, y: x <= y,
+		'>': lambda x, y: x > y,
+		'>=': lambda x, y: x >= y,
+		'!=': lambda x, y: x != y
 	}
 	"""Conditional lambdas"""
 
@@ -222,91 +221,71 @@ class Mouth(Services.Service):
 			sReplace = oConditional.group(0)
 
 			# Get the conditional parts
-			sVarName, sVarTest, mVarVal, sIfContent, sElseContent = oConditional.groups()
+			sVariable, sTest, mValue, sIf, sElse = oConditional.groups()
 
-			# Replace special tags in variable value
-			for n,v in cls._special_conditionals.items():
-				if mVarVal == n:
-					mVarVal = v
+			# Get the groups and the length
+			lGroups = list(oConditional.groups())
 
-			# Check for the variable
-			if sVarName not in variables:
-				content = content.replace(sReplace, 'INVALID VARIABLE IN CONDITIONAL')
-				continue
+			print(lGroups)
 
-			# If we didn't get None for the value
-			if mVarVal is not None:
+			# If we have no test or value
+			if sTest is None and mValue is None:
 
-				# Get the type of value for the variable
-				oVarType = type(variables[sVarName])
+				# Get the status of the variable
+				bPassed = sVariable in variables and variables[sVariable]
 
-				# Attempt to convert the value from a string if required
-				try:
+				# Figure out the replacement content
+				sNewContent = bPassed and sIf or (sElse or '')
 
-					# If it's a bool
-					if oVarType == bool:
-						mVarVal = StrHelper.to_bool(mVarVal)
+				# Replace the content
+				content = content.replace(sReplace, sNewContent)
 
-					# Else, if it's not a string
-					elif oVarType != str and oVarType != None:
-						mVarVal = oVarType(mVarVal)
+			# Else, we have a condition and value to run
+			else:
 
-				# If we can't convert the value
-				except ValueError:
-					content = content.replace(sReplace, '!!!%s has invalid value in conditional!!!' % sVarName)
+				# Replace special tags in variable value
+				for n,v in cls._special_conditionals.items():
+					if mValue == n:
+						mValue = v
+
+				# Check for the variable
+				if sVariable not in variables:
+					content = content.replace(sReplace, 'INVALID VARIABLE (%s) IN CONDITIONAL' % sVariable)
 					continue
 
-			# Figure out if the condition passed or not
-			bPassed = cls._conditional[sVarTest](variables[sVarName], mVarVal)
+				# If we didn't get None for the value
+				if mValue is not None:
 
-			# Replace the conditional with the inner text if it passed, else
-			#	just remove it
-			content = content.replace(sReplace, bPassed and sIfContent or sElseContent)
+					# Get the type of value for the variable
+					oVarType = type(variables[sVariable])
 
-		# Look for if conditionals
-		for oConditional in cls._re_if.finditer(content):
+					# Attempt to convert the value from a string if required
+					try:
 
-			# Get the entire text to replace
-			sReplace = oConditional.group(0)
+						# If it's a bool
+						if oVarType == bool:
+							mValue = StrHelper.to_bool(mValue)
 
-			# Get the conditional parts
-			sVarName, sVarTest, mVarVal, sContent = oConditional.groups()
+						# Else, if it's not a string
+						elif oVarType != str and oVarType != None:
+							mValue = oVarType(mValue)
 
-			# Replace special tags in variable value
-			for sSpecial,sReplace in cls._special_conditionals.items():
-				if mVarVal == sSpecial:
-					mVarVal = sReplace
+					# If we can't convert the value
+					except ValueError:
+						content = content.replace(sReplace, '%s HAS INVALID VALUE IN CONDITIONAL' % sVariable)
+						continue
 
-			# Check for the variable
-			if sVarName not in variables:
-				content = content.replace(sReplace, 'INVALID VARIABLE IN CONDITIONAL')
-				continue
+				# Figure out if the condition passed or not
+				bPassed = cls._conditional[lGroups[cls.COND_TYPE]](variables[sVariable], mValue)
 
-			# Get the type of value for the variable
-			oVarType = type(variables[sVarName])
+				# Figure out the replacement content
+				sNewContent = bPassed and lGroups[cls.COND_IF_CONTENT] or (
+					iGroups == 3 and lGroups[cls.COND_ELSE_CONTENT] or ''
+				)
 
-			# Attempt to convert the value from a string if required
-			try:
-
-				# If it's a bool
-				if oVarType == bool:
-					mVarVal = StrHelper.to_bool(mVarVal)
-
-				# Else, if it's not a string
-				elif oVarType != str:
-					mVarVal = oVarType(mVarVal)
-
-			# If we can't convert the value
-			except ValueError:
-				content = content.replace(sReplace, '!!!%s has invalid value in conditional!!!' % sVarName)
-				continue
-
-			# Figure out if the condition passed or not
-			bPassed = cls._conditional[sVarTest](variables[sVarName], mVarVal)
-
-			# Replace the conditional with the inner text if it passed, else
-			#	just remove it
-			content = content.replace(sReplace, bPassed and sContent or '')
+				# Replace the conditional with the inner text if it passed, else
+				#	just remove it
+				content = content.replace(sReplace, sNewContent)
 
 		# Return new content
 		return content
@@ -798,6 +777,27 @@ class Mouth(Services.Service):
 			oLocale.delete()
 		)
 
+	def locale_exists_read(self, req):
+		"""Locale Exists
+
+		Returns if the requested locale exists (True) or not (False)
+
+		Arguments:
+			req (dict): The request data: body, session, and environment
+
+		Returns:
+			Services.Response
+		"""
+
+		# If the ID is missing
+		if '_id' not in req['body']:
+			return Services.Error(body.errors.BODY_FIELD, [['_id', 'missing']])
+
+		# Return if it exists or not
+		return Services.Response(
+			Locale.exists(req['body']['_id'])
+		)
+
 	def locale_read(self, req):
 		"""Locale read
 
@@ -817,7 +817,7 @@ class Mouth(Services.Service):
 		if '_id' in req['body']:
 
 			# Fetch the record
-			dLocale = Locale.get(req['body'], raw=True)
+			dLocale = Locale.get(req['body']['_id'], raw=True)
 
 			# If it doesn't exist
 			if not dLocale:
