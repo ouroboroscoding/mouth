@@ -125,17 +125,18 @@ def cli():
 
 		'/email': {'methods': REST.CREATE},
 
-		'/locale': {'methods': REST.ALL, 'session': True},
+		'/locale': {'methods': REST.ALL},
+		'/locale/exists': {'methods': REST.READ},
 
 		'/sms': {'methods': REST.CREATE},
 
-		'/template': {'methods': REST.ALL, 'session': True},
-		'/template/contents': {'methods': REST.READ, 'session': True},
-		'/template/email': {'methods': REST.CREATE | REST.UPDATE | REST.DELETE, 'session': True},
-		'/template/email/generate': {'methods': REST.CREATE, 'session': True},
-		'/template/sms': {'methods': REST.CREATE | REST.UPDATE | REST.DELETE, 'session': True},
-		'/template/sms/generate': {'methods': REST.CREATE, 'session': True},
-		'/templates': {'methods': REST.READ, 'session': True}
+		'/template': {'methods': REST.ALL},
+		'/template/contents': {'methods': REST.READ},
+		'/template/email': {'methods': REST.CREATE | REST.UPDATE | REST.DELETE},
+		'/template/email/generate': {'methods': REST.CREATE},
+		'/template/sms': {'methods': REST.CREATE | REST.UPDATE | REST.DELETE},
+		'/template/sms/generate': {'methods': REST.CREATE},
+		'/templates': {'methods': REST.READ}
 
 		},
 		'mouth',
