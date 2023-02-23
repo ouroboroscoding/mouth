@@ -226,8 +226,6 @@ class Mouth(Services.Service):
 			# Get the groups and the length
 			lGroups = list(oConditional.groups())
 
-			print(lGroups)
-
 			# If we have no test or value
 			if sTest is None and mValue is None:
 
