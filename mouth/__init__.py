@@ -278,7 +278,7 @@ class Mouth(Services.Service):
 
 				# Figure out the replacement content
 				sNewContent = bPassed and lGroups[cls.COND_IF_CONTENT] or (
-					iGroups == 3 and lGroups[cls.COND_ELSE_CONTENT] or ''
+					lGroups[cls.COND_ELSE_CONTENT] or ''
 				)
 
 				# Replace the conditional with the inner text if it passed, else
@@ -581,8 +581,8 @@ class Mouth(Services.Service):
 			return Services.Error(body.errors.BODY_FIELD, [['content', 'missing']])
 
 		# Add it to the email
-		dEmail['subject'] = dContent['subject'],
-		dEmail['text'] = dContent['text'],
+		dEmail['subject'] = dContent['subject']
+		dEmail['text'] = dContent['text']
 		dEmail['html'] = dContent['html']
 
 		# Send the email and return the response
