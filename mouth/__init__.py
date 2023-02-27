@@ -226,8 +226,6 @@ class Mouth(Services.Service):
 			# Get the groups and the length
 			lGroups = list(oConditional.groups())
 
-			print(lGroups)
-
 			# If we have no test or value
 			if sTest is None and mValue is None:
 
@@ -280,7 +278,7 @@ class Mouth(Services.Service):
 
 				# Figure out the replacement content
 				sNewContent = bPassed and lGroups[cls.COND_IF_CONTENT] or (
-					iGroups == 3 and lGroups[cls.COND_ELSE_CONTENT] or ''
+					lGroups[cls.COND_ELSE_CONTENT] or ''
 				)
 
 				# Replace the conditional with the inner text if it passed, else
@@ -534,6 +532,17 @@ class Mouth(Services.Service):
 		if 'to' not in req['body']:
 			return Services.Error(body.errors.BODY_FIELD, [['to', 'missing']])
 
+		# Init the email options
+		dEmail = {
+			'to': req['body']['to'].strip()
+		}
+
+		# If we have attachments
+		if 'attachments' in req['body']:
+
+			# Add them to the email
+			dEmail['attachments'] = req['body']['attachments']
+
 		# If we received a template field
 		if 'template' in req['body']:
 
@@ -571,14 +580,14 @@ class Mouth(Services.Service):
 		else:
 			return Services.Error(body.errors.BODY_FIELD, [['content', 'missing']])
 
+		# Add it to the email
+		dEmail['subject'] = dContent['subject']
+		dEmail['text'] = dContent['text']
+		dEmail['html'] = dContent['html']
+
 		# Send the email and return the response
 		return Services.Response(
-			self._email({
-				'to': req['body']['to'].strip(),
-				'subject': dContent['subject'],
-				'text': dContent['text'],
-				'html': dContent['html']
-			})
+			self._email(dEmail)
 		)
 
 	def sms_create(self, req):
@@ -1282,8 +1291,12 @@ class Mouth(Services.Service):
 		body.access.verify(req['session'], 'mouth_content', body.access.READ)
 
 		# Check minimum fields
-		try: DictHelper.eval(req['body'], ['template', 'locale', 'subject', 'text', 'html'])
+		try: DictHelper.eval(req['body'], ['template', 'locale', 'text', 'html'])
 		except ValueError as e: return Services.Error(body.errors.BODY_FIELD, [[f, 'missing'] for f in e.args])
+
+		# If the subject isn't passed
+		if 'subject' not in req['body']:
+			req['body']['subject'] = ''
 
 		# Find the template variables
 		dTemplate = Template.get(req['body']['template'], raw=['variables'])
