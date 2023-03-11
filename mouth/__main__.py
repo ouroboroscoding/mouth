@@ -55,6 +55,11 @@ def cli():
 		'passwd': ''
 	}))
 
+	# Set the timestamp timezone
+	Record_MySQL.timestamp_timezone(
+		Conf.get(('mysql', 'timestamp_timezone'), '+00:00')
+	)
+
 	# If we are installing
 	if len(sys.argv) > 1 and sys.argv[1] == 'install':
 		return install()
