@@ -10,6 +10,9 @@ __version__		= "1.0.0"
 __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-01-05"
 
+# Limit exports
+__all__ = ['errors', 'Mouth']
+
 # Python imports
 from base64 import b64decode
 from hashlib import md5
@@ -483,7 +486,7 @@ class Mouth(Services.Service):
 			# Init the base arguments
 			dArgs = {
 				'to': 'override' in self._dSMS and self._dSMS['override'] or opts['to'],
-				'data': opts['content']
+				'body': opts['content']
 			}
 
 			# If we are using a service
@@ -500,8 +503,8 @@ class Mouth(Services.Service):
 
 				# Return ok
 				return {
-					"success": True,
-					"sid": dRes.sid
+					'success': True,
+					'sid': dRes.sid
 				}
 
 			# Catch any Twilio exceptions
@@ -509,8 +512,8 @@ class Mouth(Services.Service):
 
 				# Return failure
 				return {
-					"success": False,
-					"error": [v for v in e.args]
+					'success': False,
+					'error': [v for v in e.args]
 				}
 
 	def email_create(self, req):
