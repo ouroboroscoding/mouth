@@ -161,13 +161,13 @@ class Mouth(Services.Service):
 
 				# If the fields are missing
 				try:
-					DictHelper.eval(opts['attachments'][i], ['data', 'filename'])
+					DictHelper.eval(opts['attachments'][i], ['body', 'filename'])
 				except ValueError as e:
 					return Services.Error(body.errors.DATA_FIELDS, [['attachments.[%d].%s' % (i, s), 'invalid'] for s in e.args])
 
 				# Try to decode the base64
 				try:
-					opts['attachments'][i]['data'] = b64decode(opts['attachments'][i]['data'])
+					opts['attachments'][i]['body'] = b64decode(opts['attachments'][i]['body'])
 				except TypeError:
 					return Services.Response(errors.ATTACHMENT_DECODE)
 
