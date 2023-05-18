@@ -131,6 +131,7 @@ def cli():
 		'/email': {'methods': REST.CREATE},
 
 		'/locale': {'methods': REST.ALL},
+		'/locales': {'methods': REST.READ},
 		'/locale/exists': {'methods': REST.READ},
 
 		'/sms': {'methods': REST.CREATE},
