@@ -848,13 +848,13 @@ class Mouth(Services.Service):
 				# Return the raw data
 				return Services.Response(dLocale)
 
-			# If we want to include archived
-			if 'archived' in req['data'] and req['data']['archived']:
+		# If we want to include archived
+		if 'archived' in req['data'] and req['data']['archived']:
 
-				# Get and return all locales as raw data
-				return Services.Response(
-					Locale.get(raw=True, orderby='name')
-				)
+			# Get and return all locales as raw data
+			return Services.Response(
+				Locale.get(raw=True, orderby='name')
+			)
 
 		# Else, return only those not marked as archived
 		return Services.Response(
@@ -905,6 +905,35 @@ class Mouth(Services.Service):
 			)
 		except Record_Base.DuplicateException as e:
 			return Services.Error(body.errors.DB_DUPLICATE, (req['data']['name'], 'template'))
+
+	def locales_read(self, req):
+		"""Locales read
+
+		Returns the list of valid locales without any requirement for being
+		signed in
+
+		Arguments:
+			req (dict): The request details, which can include 'data',
+						'environment', and 'session'
+
+		Returns:
+			Services.Response
+		"""
+
+		# If we have data, and we have archived, and it's true
+		bArchived = 'data' in req and 'archived' in req['data'] and req['data']['archived']
+
+		# If we want to include archived data or not
+		filter = not bArchived and {'_archived': False} or None
+
+		# Get and return all locales as raw data
+		return Services.Response(
+			Locale.get(
+				filter=filter,
+				raw=['_id', 'name'],
+				orderby='name'
+			)
+		)
 
 	def template_create(self, req):
 		"""Template create
