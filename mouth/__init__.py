@@ -206,7 +206,7 @@ class Mouth(Service):
 			if iRes != SMTP.OK:
 				return {
 					'success': False,
-					'error': '%i %s' % (iRes, SMTP.lastError())
+					'error': '%i %s' % (iRes, SMTP.last_error())
 				}
 
 		# Return OK
@@ -595,7 +595,7 @@ class Mouth(Service):
 			# Check minimum fields
 			try:
 				DictHelper.eval(
-					req['data']['template'], ['name', 'locale', 'variables']
+					req['data']['template'], ['locale', 'variables']
 				)
 			except ValueError as e:
 				return Error(
@@ -603,26 +603,47 @@ class Mouth(Service):
 					[['template.%s' % f, 'missing'] for f in e.args]
 				)
 
-			# Find the template by name
-			dTemplate = Template.filter({
-				'name': req['data']['template']['name']
-			}, raw=['_id'], limit=1)
-			if not dTemplate:
+			# If we have an id
+			if '_id' in req['data']['template']:
+
+				# Store the ID
+				sID = req['data']['template']['_id']
+
+			# Else, if we have a name
+			elif 'name' in req['data']['template']:
+
+				# Find the template by name
+				dTemplate = Template.filter({
+					'name': req['data']['template']['name']
+				}, raw=['_id'], limit=1)
+
+				# If it's not found
+				if not dTemplate:
+					return Error(
+						errors.body.DB_NO_RECORD,
+						[req['data']['template']['name'], 'template']
+					)
+
+				# Store the ID
+				sID = dTemplate['_id']
+
+			# Else, no way to find the template
+			else:
 				return Error(
-					errors.body.DB_NO_RECORD,
-					[req['data']['template']['name'], 'template']
+					errors.body.DATA_FIELDS,
+					[['name', 'missing']]
 				)
 
 			# Find the content by locale
 			dContent = TemplateEmail.filter({
-				'template': dTemplate['_id'],
+				'template': sID,
 				'locale': req['data']['template']['locale']
 			}, raw=['subject', 'text', 'html'], limit=1)
 			if not dContent:
 				return Error(
 					errors.body.DB_NO_RECORD, [
 						'%s.%s' % (
-							dTemplate['_id'], req['data']['template']['locale']
+							sID, req['data']['template']['locale']
 						),
 						'template'
 					]
@@ -680,8 +701,7 @@ class Mouth(Service):
 			# Check minimum fields
 			try:
 				DictHelper.eval(
-					req['data']['template'],
-					['name', 'locale', 'variables']
+					req['data']['template'], ['locale', 'variables']
 				)
 			except ValueError as e:
 				return Error(
@@ -689,23 +709,47 @@ class Mouth(Service):
 					[['template.%s' % f, 'missing'] for f in e.args]
 				)
 
-			# Find the template by name
-			dTemplate = Template.filter({
-				'name': req['data']['template']['name']
-			}, raw=['_id'], limit=1)
-			if not dTemplate:
-				return Error(errors.body.DB_NO_RECORD, [req['data']['template']['name'], 'template'])
+			# If we have an id
+			if '_id' in req['data']:
+
+				# Store the ID
+				sID = req['data']['_id']
+
+			# Else, if we have a name
+			elif 'name' in req['data']:
+
+				# Find the template by name
+				dTemplate = Template.filter({
+					'name': req['data']['template']['name']
+				}, raw=['_id'], limit=1)
+
+				# If it's not found
+				if not dTemplate:
+					return Error(
+						errors.body.DB_NO_RECORD,
+						[req['data']['template']['name'], 'template']
+					)
+
+				# Store the ID
+				sID = dTemplate['_id']
+
+			# Else, no way to find the template
+			else:
+				return Error(
+					errors.body.DATA_FIELDS,
+					[['name', 'missing']]
+				)
 
 			# Find the content by locale
 			dContent = TemplateSMS.filter({
-				'template': dTemplate['_id'],
+				'template': sID,
 				'locale': req['data']['template']['locale']
 			}, raw=['content'], limit=1)
 			if not dContent:
 				return Error(
 					errors.body.DB_NO_RECORD, [
 						'%s.%s' % (
-							dTemplate['_id'], req['data']['template']['locale']
+							sID, req['data']['template']['locale']
 						),
 						'template'
 					]
@@ -1090,11 +1134,21 @@ class Mouth(Service):
 				errors.body.DB_NO_RECORD, (req['data']['_id'], 'template')
 			)
 
-		# Delete all Email templates associated
-		TemplateEmail.delete_get(req['data']['_id'], index='template')
+		# For each email template associated
+		for o in TemplateEmail.filter({
+			'template': req['data']['_id']
+		}):
 
-		# Delete all SMS templates associated
-		TemplateSMS.delete_get(req['data']['_id'], index='template')
+			# Delete it
+			o.delete(changes={'user': sUserID})
+
+		# For each sms template associated
+		for o in TemplateSMS.filter({
+			'template': req['data']['_id']
+		}):
+
+			# Delete it
+			o.delete(changes={'user': sUserID})
 
 		# Delete the template and return the result
 		return Response(
@@ -1124,36 +1178,94 @@ class Mouth(Service):
 		# Find the record
 		dTemplate = Template.get(req['data']['_id'], raw=True)
 
-		# if it doesn't exist
-		if not dTemplate:
-			return Error(
-				errors.body.DB_NO_RECORD, (req['data']['_id'], 'template')
-			)
+		# If we got a list
+		if isinstance(dTemplate, list):
 
-		# Init the list of content
-		dTemplate['content'] = []
+			# If the counts don't match
+			if len(req['data']['_id']) != len(dTemplate):
+				return Error(
+					errors.body.DB_NO_RECORD, [req['data']['_id'], 'template']
+				)
 
-		# Find all associated email content
-		dTemplate['content'].extend([
-			dict(d, type='email') for d in
-			TemplateEmail.filter({
+			# Fetch all email templates with the IDs
+			lEmails = TemplateEmail.filter({
 				'template': req['data']['_id']
-			}, raw=True)
-		])
+			}, raw = True)
 
-		# Find all associated sms content
-		dTemplate['content'].extend([
-			dict(d, type='sms') for d in
-			TemplateSMS.filter({
+			# Go through each email and store it by it's template
+			dEmails = {}
+			for d in lEmails:
+				d['type'] = 'email'
+				try:
+					dEmails[d['template']].append(d)
+				except KeyError:
+					dEmails[d['template']] = [d]
+
+			# Fetch all email templates with the IDs
+			lSMSs = TemplateSMS.filter({
 				'template': req['data']['_id']
-			}, raw=True)
-		])
+			}, raw = True)
 
-		# If there's content
-		if len(dTemplate['content']) > 1:
+			# Go through each email and store it by it's template
+			dSMSs = {}
+			for d in lSMSs:
+				d['type'] = 'sms'
+				try:
+					dSMSs[d['template']].append(d)
+				except KeyError:
+					dSMSs[d['template']] = [d]
 
-			# Sort it by locale and type
-			dTemplate['content'].sort(key=itemgetter('locale', 'type'))
+			# Go through each template and add the emails and sms messages
+			for d in dTemplate:
+				d['content'] = []
+
+				# Add the email templates
+				if d['_id'] in dEmails:
+					d['content'].extend(dEmails[d['_id']])
+
+				# Add the SMS templates
+				if d['_id'] in dSMSs:
+					d['content'].extend(dSMSs[d['_id']])
+
+				# If there's content
+				if len(d['content']) > 1:
+
+					# Sort it by locale and type
+					d['content'].sort(key=itemgetter('locale', 'type'))
+
+		# Else, it's most likely one
+		else:
+
+			# if it doesn't exist
+			if not dTemplate:
+				return Error(
+					errors.body.DB_NO_RECORD, (req['data']['_id'], 'template')
+				)
+
+			# Init the list of content
+			dTemplate['content'] = []
+
+			# Find all associated email content
+			dTemplate['content'].extend([
+				dict(d, type='email') for d in
+				TemplateEmail.filter({
+					'template': req['data']['_id']
+				}, raw=True)
+			])
+
+			# Find all associated sms content
+			dTemplate['content'].extend([
+				dict(d, type='sms') for d in
+				TemplateSMS.filter({
+					'template': req['data']['_id']
+				}, raw=True)
+			])
+
+			# If there's content
+			if len(dTemplate['content']) > 1:
+
+				# Sort it by locale and type
+				dTemplate['content'].sort(key=itemgetter('locale', 'type'))
 
 		# Return the template
 		return Response(dTemplate)
