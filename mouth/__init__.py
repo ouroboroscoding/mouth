@@ -173,7 +173,7 @@ class Mouth(Service):
 					return Error(
 						errors.body.DATA_FIELDS,
 						[['attachments.[%d].%s' % (i, s), 'invalid'] \
-       						for s in e.args]
+							for s in e.args]
 					)
 
 				# Try to decode the base64
@@ -710,13 +710,13 @@ class Mouth(Service):
 				)
 
 			# If we have an id
-			if '_id' in req['data']:
+			if '_id' in req['data']['template']:
 
 				# Store the ID
 				sID = req['data']['_id']
 
 			# Else, if we have a name
-			elif 'name' in req['data']:
+			elif 'name' in req['data']['template']:
 
 				# Find the template by name
 				dTemplate = Template.filter({
