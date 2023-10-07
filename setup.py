@@ -4,8 +4,8 @@ with open('README.md', 'r') as oF:
 	long_description=oF.read()
 
 setup(
-	name='Mouth-OC',
-	version='1.0.5',
+	name='mouth-oc',
+	version='1.0.6',
 	description='Mouth contains a service to run outgoing communications like email and sms messages',
 	long_description=long_description,
 	long_description_content_type='text/markdown',
@@ -23,9 +23,9 @@ setup(
 	package_data={'mouth': ['definitions/*.json']},
 	python_requires='>=3.10',
 	install_requires=[
-		'Rest-OC>=1.1.1',
-		'Body-OC>=1.0.1',
-		'Brain-OC>=1.1.6',
+		'body-oc>=1.0.2,<1.1',
+		'brain-oc>=1.1.6,<1.2',
+		'rest-oc>=1.2.5,<1.3',
 		'twilio==7.16.1'
 	],
 	entry_points={
