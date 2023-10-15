@@ -27,5 +27,26 @@
 			"__regex__": "^[a-z_]+$"
 		},
 		"__type__": "string"
+	},
+
+	"locales": {
+		"__hash__": {
+			"__type__": "string",
+			"__regex__": "^[a-z]{2}-[A-Z]{2}$"
+		},
+		"__type__": {
+			"__hash__": {
+				"__type__": "string",
+				"__options__": ["email", "sms"]
+			},
+			"__type__": {
+				"__hash__": {
+					"__type__": "string",
+					"__regex__": "^[a-z]{16}$"
+				},
+				"__type__": "string",
+				"__maximum__": 65535
+			}
+		}
 	}
 }

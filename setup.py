@@ -28,7 +28,7 @@ setup(
 	install_requires=[
 		'body-oc>=2.0.0,<2.1',
 		'brain-oc>=2.0.0,<2.1',
-		'twilio==7.16.1',
+		'twilio==8.9.1',
 		'upgrade-oc>=1.0.0,<1.1'
 	],
 	entry_points={

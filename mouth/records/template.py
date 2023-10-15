@@ -28,8 +28,17 @@ Template = Storage(
 
 	# The extensions necessary to store the data in MySQL
 	{
+		# Cache related
+		'__cache__': {
+			'implementation': 'redis',
+			'redis': config.mouth.cache({
+				'redis': 'session',
+				'ttl': 0
+			})
+		},
+
 		# Table related
-		'__sql__': {
+		'__mysql__': {
 			'charset': 'utf8mb4',
 			'collate': 'utf8mb4_unicode_ci',
 			'create': [ '_created', '_updated', 'name', 'variables' ],
@@ -48,79 +57,14 @@ Template = Storage(
 		'_updated': { '__mysql__': {
 			'opts': 'default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP'
 		} },
-		'variables': { '__mysql__': { 'json': True } }
-	}
-)
-
-TEmail = Storage(
-
-	# The primary definition
-	jsonb.load(
-		'%s/definitions/template_email.json' % \
-			Path(__file__).parent.parent.resolve()
-	),
-
-	# The extensions necessary to store the data in MySQL
-	{
-		# Table related
-		'__mysql__': {
-			'charset': 'utf8mb4',
-			'collate': 'utf8mb4_unicode_ci',
-			'create': [
-				'_created', '_updated', 'template', 'locale', 'subject', 'text',
-				'html'
-			],
-			'db': config.mysql.db('mouth'),
-			'indexes': [{
-				'name': 'ui_template_locale',
-				'fields': [ 'template', 'locale' ],
-				'type': 'unique'
-			}],
-			'name': 'mouth_template_email',
-			'revisions': [ 'user' ]
-		},
-
-		# Field related
-		'_created': { '__mysql__': { 'opts': 'default CURRENT_TIMESTAMP' } },
-		'_updated': { '__mysql__': {
-			'opts': 'default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP'
-		} },
-		'locale': { '__mysql__': { 'type': 'char(5)' } }
-	}
-)
-
-TSms = Storage(
-
-	# The primary definition
-	jsonb.load(
-		'%s/definitions/template_sms.json' % \
-			Path(__file__).parent.parent.resolve()
-	),
-
-	# The extensions necessary to store the data in MySQL
-	{
-		# Table related
-		'__mysql__': {
-			'charset': 'utf8mb4',
-			'collate': 'utf8mb4_unicode_ci',
-			'create': [
-				'_created', '_updated', 'template', 'locale', 'content'
-			],
-			'db': config.mysql.db('mouth'),
-			'indexes': [{
-				'name': 'ui_template_locale',
-				'fields': [ 'template', 'locale' ],
-				'type': 'unique'
-			}],
-			'name': 'mouth_template_sms',
-			'revisions': [ 'user' ]
-		},
-
-		# Field related
-		'_created': { '__mysql__': { 'opts': 'default CURRENT_TIMESTAMP' } },
-		'_updated': { '__mysql__': {
-			'opts': 'default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP'
-		} },
-		'locale': { '__mysql__': { 'type': 'char(5)' } }
+		'variables': { '__mysql__': { 'json': True } },
+		'locales': {
+			'__hash__': { '__mysql__': { 'type': 'char(5)' } },
+			'__type__': {
+				'__type__': {
+					'__hash__': { '__mysql__': { 'type': 'varchar(16)' } }
+				}
+			}
+		}
 	}
 )

@@ -36,8 +36,6 @@ def install(data):
 	# Install records
 	locale.Locale.install()
 	template.Template.install()
-	template.TEmail.install()
-	template.TSms.install()
 
 	# Store the last known upgrade version
 	set_latest(
