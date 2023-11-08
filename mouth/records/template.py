@@ -34,7 +34,10 @@ Template = Storage(
 			'redis': config.mouth.cache({
 				'redis': 'session',
 				'ttl': 0
-			})
+			}),
+			'indexes': {
+				'ui_name': [ 'name' ]
+			}
 		},
 
 		# Table related
@@ -43,11 +46,12 @@ Template = Storage(
 			'collate': 'utf8mb4_unicode_ci',
 			'create': [ '_created', '_updated', 'name', 'variables' ],
 			'db': config.mysql.db('mouth'),
-			'indexes': [{
-				'name': 'ui_name',
-				'fields': 'name',
-				'type': 'unique'
-			}],
+			'indexes': {
+				'ui_name': {
+					'fields': 'name',
+					'type': 'unique'
+				}
+			},
 			'name': 'mouth_template',
 			'revisions': [ 'user' ]
 		},
@@ -61,9 +65,7 @@ Template = Storage(
 		'locales': {
 			'__hash__': { '__mysql__': { 'type': 'char(5)' } },
 			'__type__': {
-				'__type__': {
-					'__hash__': { '__mysql__': { 'type': 'varchar(16)' } }
-				}
+				'__hash__': { '__mysql__': { 'type': 'varchar(32)' } }
 			}
 		}
 	}

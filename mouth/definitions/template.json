@@ -37,16 +37,10 @@
 		"__type__": {
 			"__hash__": {
 				"__type__": "string",
-				"__options__": ["email", "sms"]
+				"__regex__": "^[a-z]{32}$"
 			},
-			"__type__": {
-				"__hash__": {
-					"__type__": "string",
-					"__regex__": "^[a-z]{16}$"
-				},
-				"__type__": "string",
-				"__maximum__": 65535
-			}
+			"__type__": "string",
+			"__maximum__": 65535
 		}
 	}
 }

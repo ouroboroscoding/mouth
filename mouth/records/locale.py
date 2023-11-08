@@ -36,11 +36,12 @@ Locale = Storage(
 				'_archived', '_created', 'name'
 			],
 			'db': config.mysql.db('mouth'),
-			'indexes': [{
-				'name': 'ui_name',
-				'fields': 'name',
-				'type': 'unique'
-			}],
+			'indexes': {
+				'ui_name': {
+					'fields': 'name',
+					'type': 'unique'
+				}
+			},
 			'name': 'mouth_locale'
 		},
 
