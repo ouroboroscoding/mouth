@@ -933,6 +933,21 @@ class Mouth(Service):
 		if '_id' not in req['data']:
 			return Error(errors.body.DATA_FIELDS, [['_id', 'missing']])
 
+		# If we got an array
+		if isinstance(req['data']['_id'], list):
+
+			# If the list is empty
+			if not req['data']['_id']:
+				return Response(False)
+
+			# Get the IDs
+			lRecords = Locale.get(req['data']['_id'], raw = [ '_id' ])
+
+			# Return OK if the counts match
+			return Response(
+				len(lRecords) == len(req['data']['_id'])
+			)
+
 		# Return if it exists or not
 		return Response(
 			Locale.exists(req['data']['_id'])
