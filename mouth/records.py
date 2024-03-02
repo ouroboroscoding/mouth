@@ -10,12 +10,15 @@ __maintainer__	= "Chris Nasr"
 __email__		= "chris@ouroboroscoding.com"
 __created__		= "2022-12-12"
 
+# Ouroboros imports
+from config import config
+
 # Python imports
 import pathlib
 
 # Pip imports
 from FormatOC import Tree
-from RestOC import Conf, Record_MySQL
+from RestOC import Record_MySQL
 
 # Get the definitions path
 _defPath = '%s/definitions' % pathlib.Path(__file__).parent.resolve()
@@ -59,7 +62,7 @@ class Locale(Record_MySQL.Record):
 		if not cls._conf:
 			cls._conf = Record_MySQL.Record.generate_config(
 				Tree.fromFile('%s/locale.json' % _defPath),
-				override={'db': Conf.get(('mysql', 'db'), 'mouth')}
+				override={'db': config.mysql.db('mouth')}
 			)
 
 		# Return the config
@@ -91,7 +94,7 @@ class Template(Record_MySQL.Record):
 		if not cls._conf:
 			cls._conf = Record_MySQL.Record.generate_config(
 				Tree.fromFile('%s/template.json' % _defPath),
-				override={'db': Conf.get(('mysql', 'db'), 'mouth')}
+				override={'db': config.mysql.db('mouth')}
 			)
 
 		# Return the config
@@ -123,7 +126,7 @@ class TemplateEmail(Record_MySQL.Record):
 		if not cls._conf:
 			cls._conf = Record_MySQL.Record.generate_config(
 				Tree.fromFile('%s/template_email.json' % _defPath),
-				override={'db': Conf.get(('mysql', 'db'), 'mouth')}
+				override={'db': config.mysql.db('mouth')}
 			)
 
 		# Return the config
@@ -155,7 +158,7 @@ class TemplateSMS(Record_MySQL.Record):
 		if not cls._conf:
 			cls._conf = Record_MySQL.Record.generate_config(
 				Tree.fromFile('%s/template_sms.json' % _defPath),
-				override={'db': Conf.get(('mysql', 'db'), 'mouth')}
+				override={'db': config.mysql.db('mouth')}
 			)
 
 		# Return the config
