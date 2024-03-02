@@ -13,6 +13,9 @@ __created__		= "2023-01-05"
 # Limit exports
 __all__ = ['errors', 'Mouth']
 
+# Ouroboros imports
+from tools import evaluate
+
 # Python imports
 from base64 import b64decode
 from hashlib import md5
@@ -166,7 +169,7 @@ class Mouth(Service):
 
 				# If the fields are missing
 				try:
-					DictHelper.eval(
+					evaluate(
 						opts['attachments'][i], ['body', 'filename']
 					)
 				except ValueError as e:
@@ -594,7 +597,7 @@ class Mouth(Service):
 
 			# Check minimum fields
 			try:
-				DictHelper.eval(
+				evaluate(
 					req['data']['template'], ['locale', 'variables']
 				)
 			except ValueError as e:
@@ -700,7 +703,7 @@ class Mouth(Service):
 
 			# Check minimum fields
 			try:
-				DictHelper.eval(
+				evaluate(
 					req['data']['template'], ['locale', 'variables']
 				)
 			except ValueError as e:
@@ -1018,7 +1021,7 @@ class Mouth(Service):
 
 		# Check minimum fields
 		try:
-			DictHelper.eval(req['data'], ['_id', 'name'])
+			evaluate(req['data'], ['_id', 'name'])
 		except ValueError as e:
 			return Error(
 				errors.body.DATA_FIELDS, [[f, 'missing'] for f in e.args]
@@ -1417,7 +1420,7 @@ class Mouth(Service):
 
 		# Check minimum fields
 		try:
-			DictHelper.eval(req['data'], ['template', 'locale'])
+			evaluate(req['data'], ['template', 'locale'])
 		except ValueError as e:
 			return Error(
 				errors.body.DATA_FIELDS, [[f, 'missing'] for f in e.args]
@@ -1590,7 +1593,7 @@ class Mouth(Service):
 
 		# Check minimum fields
 		try:
-			DictHelper.eval(req['data'], ['template', 'locale', 'text', 'html'])
+			evaluate(req['data'], ['template', 'locale', 'text', 'html'])
 		except ValueError as e:
 			return Error(
 				errors.body.DATA_FIELDS, [[f, 'missing'] for f in e.args]
@@ -1639,7 +1642,7 @@ class Mouth(Service):
 		sUserID = access.internal_or_verify(req, 'mouth_content', access.CREATE)
 
 		# Check minimum fields
-		try: DictHelper.eval(req['data'], ['template', 'locale'])
+		try: evaluate(req['data'], ['template', 'locale'])
 		except ValueError as e:
 			return Error(
 				errors.body.DATA_FIELDS, [[f, 'missing'] for f in e.args]
@@ -1738,7 +1741,7 @@ class Mouth(Service):
 		sUserID = access.internal_or_verify(req, 'mouth_content', access.UPDATE)
 
 		# Check minimum fields
-		try: DictHelper.eval(req['data'], ['_id', 'content'])
+		try: evaluate(req['data'], ['_id', 'content'])
 		except ValueError as e:
 			return Error(
 				errors.body.DATA_FIELDS, [[f, 'missing'] for f in e.args]
@@ -1796,7 +1799,7 @@ class Mouth(Service):
 		sUserID = access.internal_or_verify(req, 'mouth_content', access.READ)
 
 		# Check minimum fields
-		try: DictHelper.eval(req['data'], ['template', 'locale', 'content'])
+		try: evaluate(req['data'], ['template', 'locale', 'content'])
 		except ValueError as e:
 			return Error(
 				errors.body.DATA_FIELDS, [[f, 'missing'] for f in e.args]

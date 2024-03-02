@@ -5,7 +5,7 @@ with open('README.md', 'r') as oF:
 
 setup(
 	name='mouth-oc',
-	version='1.0.7',
+	version='1.0.8',
 	description='Mouth contains a service to run outgoing communications like email and sms messages',
 	long_description=long_description,
 	long_description_content_type='text/markdown',
@@ -24,8 +24,10 @@ setup(
 	python_requires='>=3.10',
 	install_requires=[
 		'body-oc>=1.0.2,<1.1',
-		'brain-oc>=1.1.8,<1.2',
-		'rest-oc>=1.2.5,<1.3',
+		'brain-oc>=1.1.9,<1.2',
+		'config-oc>=1.0.3,<1.1',
+		'rest-oc>=1.3.0,<1.4',
+		'tools-oc>=1.2.4,<1.3',
 		'twilio==7.16.1'
 	],
 	entry_points={
