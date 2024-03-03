@@ -14,17 +14,18 @@ __created__		= "2023-01-05"
 __all__ = ['errors', 'Mouth']
 
 # Ouroboros imports
-from tools import evaluate
+from config import config
+from strings import to_bool
+from tools import clone, evaluate
 
 # Python imports
 from base64 import b64decode
-from hashlib import md5
 from operator import itemgetter
 import re
 
 # Pip imports
 from brain import access
-from RestOC import Conf, DictHelper, Record_Base, SMTP, StrHelper
+from RestOC import Record_Base, SMTP
 from RestOC.Services import Error, Response, Service
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
@@ -292,7 +293,7 @@ class Mouth(Service):
 
 						# If it's a bool
 						if oVarType == bool:
-							mValue = StrHelper.to_bool(mValue)
+							mValue = to_bool(mValue)
 
 						# Else, if it's not a string
 						elif oVarType != str and oVarType != None:
@@ -346,7 +347,7 @@ class Mouth(Service):
 			templates = {}
 
 		# Copy the contents
-		dContent = DictHelper.clone(content)
+		dContent = clone(content)
 
 		# Go through each each part of the template
 		for s in ['subject', 'text', 'html']:
@@ -480,34 +481,6 @@ class Mouth(Service):
 
 		# Return the new contents
 		return content
-
-	def _queue_key(self, data, key=None):
-		"""Queue Key
-
-		If the key is not passed we are generating it, else we are validating it
-
-		Arguments:
-			data (dict): The data that was passed or retrieved
-			key (str): The key to validate if passed
-
-		Returns:
-			str|bool
-		"""
-
-		# Turn the data into a str and md5 it
-		sMD5 = md5(str(data).encode('utf-8')).hexdigest()
-
-		# If a key was received
-		if key:
-
-			# Decode it and see if it matches the data
-			return StrHelper.decrypt(self._queue_key, key) == sMD5
-
-		# Else
-		else:
-
-			# Generate and return a key
-			return StrHelper.encrypt(self._queue_key, sMD5)
 
 	def _sms(self, opts):
 		"""SMS
@@ -791,20 +764,16 @@ class Mouth(Service):
 		"""
 
 		# Fetch and store Email config
-		dDefault = {
+		self._dEmail = config.email({
 			'allowed': None,
 			'errors': 'webmaster@localhost',
 			'from': 'support@localehost',
 			'method': 'direct',
 			'override': None
-		}
-		self._dEmail = Conf.get('email', dDefault)
-		for k in dDefault.keys():
-			if k not in self._dEmail:
-				self._dEmail[k] = dDefault[k]
+		})
 
 		# Fetch and store SMS config
-		dDefault = {
+		self._dSMS = config.sms({
 			'active': False,
 			'allowed': None,
 			'method': 'direct',
@@ -814,11 +783,7 @@ class Mouth(Service):
 				'token': '',
 				'from_number': ''
 			}
-		}
-		self._dSMS = Conf.get('sms', dDefault)
-		for k in dDefault.keys():
-			if k not in self._dSMS:
-				self._dSMS[k] = dDefault[k]
+		})
 
 		# If SMS is active
 		if self._dSMS['active']:
