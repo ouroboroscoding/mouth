@@ -5,7 +5,7 @@ with open('README.md', 'r') as oF:
 
 setup(
 	name='mouth-oc',
-	version='1.0.8',
+	version='1.0.9',
 	description='Mouth contains a service to run outgoing communications like email and sms messages',
 	long_description=long_description,
 	long_description_content_type='text/markdown',
