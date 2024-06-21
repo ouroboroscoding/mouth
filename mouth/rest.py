@@ -66,11 +66,11 @@ def run():
 
 	# Run the REST server with the Client instance
 	REST(
-		'mouth',
-		oMouth,
-		config.body.rest.allowed('mouth.local'),
-		errors,
-		dConf['verbose']
+		name = 'mouth',
+		instance = oMouth,
+		cors = config.body.rest.allowed('mouth.local'),
+		on_errors = errors,
+		verbose = dConf['verbose']
 	).run(
 		host = oRest['mouth']['host'],
 		port = oRest['mouth']['port'],

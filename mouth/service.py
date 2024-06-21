@@ -21,8 +21,8 @@ from config import config
 import em
 from jobject import jobject
 from strings import to_bool
-from record.exceptions import RecordDuplicate
-from tools import clone, evaluate
+from record.exceptions import RecordDuplicate, RecordServerException
+from tools import clone, evaluate, without
 import undefined
 
 # Python imports
@@ -753,17 +753,21 @@ class Mouth(Service):
 		# Make sure the client has access via the session
 		access.verify(req.session, 'mouth_locale', rights.CREATE)
 
-		# Verify the instance
+		# If we are missing the record
+		if 'record' not in req.data:
+			return Error(errors.body.DATA_FIELDS, [ [ 'record', 'missing' ] ])
+
+		# Verify and create the record
 		try:
-			oLocale = Locale(req.data)
+			oLocale = Locale.add(req.data.record)
 		except ValueError as e:
 			return Error(errors.body.DATA_FIELDS, e.args[0])
-
-		# If it's valid data, try to add it to the DB
-		try:
-			oLocale.create()
 		except RecordDuplicate as e:
-			return Error(errors.body.DB_DUPLICATE, 'locale')
+			return Error(errors.body.DB_DUPLICATE, e.args)
+		except RecordServerException as e:
+			return Error(
+				errors.body.DB_CREATE_FAILED, [ 'locale', req.data.record]
+			)
 
 		# Return OK
 		return Response(True)
@@ -810,7 +814,7 @@ class Mouth(Service):
 
 		# Delete the record and return the result
 		return Response(
-			oLocale.delete()
+			oLocale.remove()
 		)
 
 	def locale_exists_read(self, req: jobject) -> Response:
@@ -901,7 +905,7 @@ class Mouth(Service):
 
 		# Check minimum fields
 		try:
-			evaluate(req.data, ['_id', 'name'])
+			evaluate(req.data, [ '_id', 'record' ])
 		except ValueError as e:
 			return Error(
 				errors.body.DATA_FIELDS, [[f, 'missing'] for f in e.args]
@@ -919,7 +923,9 @@ class Mouth(Service):
 			return Error(errors.body.DB_ARCHIVED, [ req.data._id, 'locale' ])
 
 		# Update the name
-		oLocale.update({ 'name': req.data.name })
+		oLocale.update(
+			without(req.data.record, [ '_archived', '_created' ])
+		)
 
 		# Test if the updates are valid
 		if not oLocale.valid():
@@ -927,7 +933,9 @@ class Mouth(Service):
 
 		# Save the record and return the result
 		try:
-			return Response( oLocale.save() )
+			return Response(
+				oLocale.save()
+			)
 		except RecordDuplicate as e:
 			return Error(
 				errors.body.DB_DUPLICATE, [ req.data.name, 'template' ]
@@ -954,7 +962,7 @@ class Mouth(Service):
 
 		# Else, get just the non-archived ones
 		else:
-			lRecords = Locale.filte({
+			lRecords = Locale.filter({
 				'_archived': False
 			}, raw = [ '_id', 'name' ])
 
@@ -989,24 +997,19 @@ class Mouth(Service):
 			req, 'mouth_template', rights.CREATE
 		)
 
-		# If the name is missing
-		if 'name' not in req.data:
-			return Error(errors.body.DATA_FIELDS, [['name', 'missing']])
-
-		# Verify the instance
+		# Create and validate the record
 		try:
-			oTemplate = Template(req.data)
+			sID = Template.add(
+				req.data.record,
+				revision_info = { 'user': sUserID }
+			)
 		except ValueError as e:
 			return Error(errors.body.DATA_FIELDS, e.args[0])
-
-		# If it's valid data, try to add it to the DB
-		try:
-			oTemplate.create(changes={'user': sUserID})
-		except RecordDuplicate as e:
+		except RecordDuplicate:
 			return Error(errors.body.DB_DUPLICATE, 'template')
 
 		# Return the ID to indicate OK
-		return Response(oTemplate['_id'])
+		return Response(sID)
 
 	def template_delete(self, req: jobject) -> Response:
 		"""Template delete
@@ -1027,7 +1030,7 @@ class Mouth(Service):
 
 		# If the ID is missing
 		if '_id' not in req.data:
-			return Error(errors.body.DATA_FIELDS, [['_id', 'missing']])
+			return Error(errors.body.DATA_FIELDS, [ [ '_id', 'missing' ] ])
 
 		# Find the record
 		oTemplate = Template.get(req.data._id)
@@ -1035,28 +1038,12 @@ class Mouth(Service):
 		# If it's not found
 		if not oTemplate:
 			return Error(
-				errors.body.DB_NO_RECORD, (req.data._id, 'template')
+				errors.body.DB_NO_RECORD, [ req.data._id, 'template' ]
 			)
-
-		# For each email template associated
-		for o in TemplateEmail.filter({
-			'template': req.data._id
-		}):
-
-			# Delete it
-			o.delete(changes={'user': sUserID})
-
-		# For each sms template associated
-		for o in TemplateSMS.filter({
-			'template': req.data._id
-		}):
-
-			# Delete it
-			o.delete(changes={'user': sUserID})
 
 		# Delete the template and return the result
 		return Response(
-			oTemplate.delete(changes={'user': sUserID})
+			oTemplate.delete(revision_info = { 'user': sUserID })
 		)
 
 	def template_read(self, req: jobject) -> Response:
@@ -1076,10 +1063,10 @@ class Mouth(Service):
 
 		# If the ID is missing
 		if '_id' not in req.data:
-			return Error(errors.body.DATA_FIELDS, [['_id', 'missing']])
+			return Error(errors.body.DATA_FIELDS, [ [ '_id', 'missing' ] ])
 
 		# Find the record
-		dTemplate = Template.get(req.data._id, raw=True)
+		dTemplate = Template.get(req.data._id, raw = True)
 
 		# If we got a list
 		if isinstance(dTemplate, list):
@@ -1087,54 +1074,8 @@ class Mouth(Service):
 			# If the counts don't match
 			if len(req.data._id) != len(dTemplate):
 				return Error(
-					errors.body.DB_NO_RECORD, [req.data._id, 'template']
+					errors.body.DB_NO_RECORD, [ req.data._id, 'template' ]
 				)
-
-			# Fetch all email templates with the IDs
-			lEmails = TemplateEmail.filter({
-				'template': req.data._id
-			}, raw = True)
-
-			# Go through each email and store it by it's template
-			dEmails = {}
-			for d in lEmails:
-				d['type'] = 'email'
-				try:
-					dEmails[d['template']].append(d)
-				except KeyError:
-					dEmails[d['template']] = [d]
-
-			# Fetch all email templates with the IDs
-			lSMSs = TemplateSMS.filter({
-				'template': req.data._id
-			}, raw = True)
-
-			# Go through each email and store it by it's template
-			dSMSs = {}
-			for d in lSMSs:
-				d['type'] = 'sms'
-				try:
-					dSMSs[d['template']].append(d)
-				except KeyError:
-					dSMSs[d['template']] = [d]
-
-			# Go through each template and add the emails and sms messages
-			for d in dTemplate:
-				d['content'] = []
-
-				# Add the email templates
-				if d['_id'] in dEmails:
-					d['content'].extend(dEmails[d['_id']])
-
-				# Add the SMS templates
-				if d['_id'] in dSMSs:
-					d['content'].extend(dSMSs[d['_id']])
-
-				# If there's content
-				if len(d['content']) > 1:
-
-					# Sort it by locale and type
-					d['content'].sort(key=itemgetter('locale', 'type'))
 
 		# Else, it's most likely one
 		else:
@@ -1142,33 +1083,8 @@ class Mouth(Service):
 			# if it doesn't exist
 			if not dTemplate:
 				return Error(
-					errors.body.DB_NO_RECORD, (req.data._id, 'template')
+					errors.body.DB_NO_RECORD, [ req.data._id, 'template' ]
 				)
-
-			# Init the list of content
-			dTemplate['content'] = []
-
-			# Find all associated email content
-			dTemplate['content'].extend([
-				dict(d, type='email') for d in
-				TemplateEmail.filter({
-					'template': req.data._id
-				}, raw=True)
-			])
-
-			# Find all associated sms content
-			dTemplate['content'].extend([
-				dict(d, type='sms') for d in
-				TemplateSMS.filter({
-					'template': req.data._id
-				}, raw=True)
-			])
-
-			# If there's content
-			if len(dTemplate['content']) > 1:
-
-				# Sort it by locale and type
-				dTemplate['content'].sort(key=itemgetter('locale', 'type'))
 
 		# Return the template
 		return Response(dTemplate)
@@ -1192,7 +1108,7 @@ class Mouth(Service):
 
 		# Check for ID
 		if '_id' not in req.data:
-			return Error(errors.body.DATA_FIELDS, [['_id', 'missing']])
+			return Error(errors.body.DATA_FIELDS, [ [ '_id', 'missing' ] ])
 
 		# Find the record
 		oTemplate = Template.get(req.data._id)
@@ -1200,259 +1116,28 @@ class Mouth(Service):
 		# If it doesn't exist
 		if not oTemplate:
 			return Error(
-				errors.body.DB_NO_RECORD, (req.data._id, 'template')
+				errors.body.DB_NO_RECORD, [ req.data._id, 'template' ]
 			)
 
 		# Remove fields that can't be updated
-		for k in ['_id', '_created', '_updated']:
-			try: del req.data[k]
-			except KeyError: pass
+		without(req.data.record, ['_id', '_created', '_updated'], True)
 
 		# If there's nothing left
-		if not req.data:
+		if not req.data.record:
 			return Response(False)
 
-		# Init errors list
-		lErrors = []
+		# Update the record
+		dChanges = oTemplate.update(req.data.record)
 
-		# Update remaining fields
-		for k in req.data:
-			try:
-				oTemplate[k] = req.data[k]
-			except ValueError as e:
-				lErrors.extend(e.args[0])
+		# If it's not valid
+		if not oTemplate.valid():
+			return Error(errors.body.DATA_FIELDS, oTemplate.errors)
 
-		# Save the record and return the result
-		try:
-			return Response(
-				oTemplate.save(changes={'user': sUserID})
-			)
-		except RecordDuplicate as e:
-			return Error(
-				errors.body.DB_DUPLICATE, (req.data['name'], 'template')
-			)
+		# Save the record and store the result
+		bRes = oTemplate.save(revision_info = { 'user' : sUserID })
 
-	def template_contents_read(self, req: jobject) -> Response:
-		"""Template Contents read
-
-		Returns all the content records for a single template
-
-		Arguments:
-			req (jobject): Contains data and session if available
-
-		Returns:
-			Response
-		"""
-
-		# Make sure the client has access via the session
-		access.internal_or_verify(req, 'mouth_content', rights.READ)
-
-		# If 'template' is missing
-		if 'template' not in req.data:
-			return Error(errors.body.DATA_FIELDS, [['template', 'missing']])
-
-		# If the template doesn't exist
-		if not Template.exists(req.data.template):
-			return Error(
-				errors.body.DB_NO_RECORD, [req.data.template, 'template']
-			)
-
-		# Init the list of content
-		lContents = []
-
-		# Find all associated email content
-		lContents.extend([
-			dict(d, type='email') for d in
-			TemplateEmail.filter({
-				'template': req.data.template
-			}, raw=True)
-		])
-
-		# Find all associated sms content
-		lContents.extend([
-			dict(d, type='sms') for d in
-			TemplateSMS.filter({
-				'template': req.data.template
-			}, raw=True)
-		])
-
-		# If there's content
-		if len(lContents) > 1:
-
-			# Sort it by locale and type
-			lContents.sort(key=itemgetter('locale', 'type'))
-
-		# Return the template
-		return Response(lContents)
-
-	def template_email_create(self, req: jobject) -> Response:
-		"""Template Email create
-
-		Adds an email content record to an existing template record instance
-
-		Arguments:
-			req (jobject): Contains data and session if available
-
-		Returns:
-			Response
-		"""
-
-		# Make sure the client has access via the session
-		sUserID = access.internal_or_verify(req, 'mouth_content', rights.CREATE)
-
-		# Check minimum fields
-		try:
-			evaluate(req.data, ['template', 'locale'])
-		except ValueError as e:
-			return Error(
-				errors.body.DATA_FIELDS, [[f, 'missing'] for f in e.args]
-			)
-
-		# Make sure the template exists
-		dTemplate = Template.get(req.data.template, raw=['variables'])
-		if not dTemplate:
-			return Error(
-				errors.body.DB_NO_RECORD, (req.data.template, 'template')
-			)
-
-		# Make sure the locale exists
-		if not Locale.exists(req.data['locale']):
-			return Error(
-				errors.body.DB_NO_RECORD, (req.data['locale'], 'locale')
-			)
-
-		# Verify the instance
-		try:
-			oEmail = TemplateEmail(req.data)
-		except ValueError as e:
-			return Error(errors.body.DATA_FIELDS, e.args[0])
-
-		# Check content for errors
-		lErrors = self._checkTemplateContent(
-			req.data,
-			['subject', 'text', 'html'],
-			dTemplate['variables']
-		)
-
-		# If there's any errors
-		if lErrors:
-			return Error(errors.TEMPLATE_CONTENT_ERROR, lErrors)
-
-		# Create the record
-		try:
-			oEmail.create(changes={'user': sUserID})
-		except RecordDuplicate as e:
-			return Error(
-				errors.body.DB_DUPLICATE,
-				(req.data['locale'], 'template_locale')
-			)
-
-		# Return the ID to indicate OK
-		return Response(oEmail['_id'])
-
-	def template_email_delete(self, req: jobject) -> Response:
-		"""Template Email delete
-
-		Deletes email content from an existing template record instance
-
-		Arguments:
-			req (jobject): Contains data and session if available
-
-		Returns:
-			Response
-		"""
-
-		# Make sure the client has access via the session
-		sUserID = access.internal_or_verify(req, 'mouth_content', rights.DELETE)
-
-		# If the ID is missing
-		if '_id' not in req.data:
-			return Error(errors.body.DATA_FIELDS, [['_id', 'missing']])
-
-		# Find the record
-		oEmail = TemplateEmail.get(req.data._id)
-
-		# If it doesn't exist
-		if not oEmail:
-			return Error(
-				errors.body.DB_NO_RECORD,
-				(req.data._id, 'template_email')
-			)
-
-		# Delete the record and return the result
-		return Response(
-			oEmail.delete(changes={'user': sUserID})
-		)
-
-	def template_email_update(self, req: jobject) -> Response:
-		"""Template Email update
-
-		Updated email content of an existing template record instance
-
-		Arguments:
-			req (jobject): Contains data and session if available
-
-		Returns:
-			Response
-		"""
-
-		# Make sure the client has access via the session
-		sUserID = access.internal_or_verify(req, 'mouth_content', rights.UPDATE)
-
-		# If the ID is missing
-		if '_id' not in req.data:
-			return Error(errors.body.DATA_FIELDS, [['_id', 'missing']])
-
-		# Find the record
-		oEmail = TemplateEmail.get(req.data._id)
-
-		# If it doesn't exist
-		if not oEmail:
-			return Error(
-				errors.body.DB_NO_RECORD, (req.data._id, 'template_email')
-			)
-
-		# Remove fields that can't be updated
-		for k in ['_id', '_created', '_updated', 'template', 'locale']:
-			try: del req.data[k]
-			except KeyError: pass
-
-		# If there's nothing left
-		if not req.data:
-			return Response(False)
-
-		# Init errors list
-		lErrors = []
-
-		# Update remaining fields
-		for k in req.data:
-			try:
-				oEmail[k] = req.data[k]
-			except ValueError as e:
-				lErrors.extend(e.args[0])
-
-		# If there's any errors
-		if lErrors:
-			return Error(errors.body.DATA_FIELDS, lErrors)
-
-		# Find the primary template variables
-		dTemplate = Template.get(oEmail['template'], raw=['variables'])
-
-		# Check content for errors
-		lErrors = self._checkTemplateContent(
-			req.data,
-			['subject', 'text', 'html'],
-			dTemplate['variables']
-		)
-
-		# If there's any errors
-		if lErrors:
-			return Error(errors.TEMPLATE_CONTENT_ERROR, lErrors)
-
-		# Save the record and return the result
-		return Response(
-			oEmail.save(changes={'user': sUserID})
-		)
+		# Return the changes or False
+		return Response(bRes and dChanges or False)
 
 	def template_email_generate_create(self, req: jobject) -> Response:
 		"""Template Email Generate create
@@ -1502,159 +1187,6 @@ class Mouth(Service):
 				'text': req.data['text'],
 				'html': req.data['html']
 			}, req.data['locale'], dTemplate['variables'])
-		)
-
-	def template_sms_create(self, req: jobject) -> Response:
-		"""Template SMS create
-
-		Adds an sms content record to an existing template record instance
-
-		Arguments:
-			req (jobject): Contains data and session if available
-
-		Returns:
-			Response
-		"""
-
-		# Make sure the client has access via the session
-		sUserID = access.internal_or_verify(req, 'mouth_content', rights.CREATE)
-
-		# Check minimum fields
-		try: evaluate(req.data, ['template', 'locale'])
-		except ValueError as e:
-			return Error(
-				errors.body.DATA_FIELDS, [[f, 'missing'] for f in e.args]
-			)
-
-		# Make sure the template exists
-		dTemplate = Template.get(req.data.template, raw=['variables'])
-		if not dTemplate:
-			return Error(
-				errors.body.DB_NO_RECORD, (req.data.template, 'template')
-			)
-
-		# Make sure the locale exists
-		if not Locale.exists(req.data['locale']):
-			return Error(
-				errors.body.DB_NO_RECORD, (req.data['locale'], 'locale')
-			)
-
-		# Verify the instance
-		try:
-			oSMS = TemplateSMS(req.data)
-		except ValueError as e:
-			return Error(errors.body.DATA_FIELDS, e.args[0])
-
-		# Check content for errors
-		lErrors = self._checkTemplateContent(
-			req.data,
-			['content'],
-			dTemplate['variables']
-		)
-
-		# If there's any errors
-		if lErrors:
-			return Error(errors.TEMPLATE_CONTENT_ERROR, lErrors)
-
-		# Create the record
-		try:
-			oSMS.create(changes={'user': sUserID})
-		except RecordDuplicate as e:
-			return Error(
-				errors.body.DB_DUPLICATE,
-				(req.data['locale'], 'template_locale')
-			)
-
-		# Return the ID to indicate OK
-		return Response(oSMS['_id'])
-
-	def template_sms_delete(self, req: jobject) -> Response:
-		"""Template SMS delete
-
-		Deletes sms content from an existing template record instance
-
-		Arguments:
-			req (jobject): Contains data and session if available
-
-		Returns:
-			Response
-		"""
-
-		# Make sure the client has access via the session
-		sUserID = access.internal_or_verify(req, 'mouth_content', rights.DELETE)
-
-		# If the ID is missing
-		if '_id' not in req.data:
-			return Error(errors.body.DATA_FIELDS, [['_id', 'missing']])
-
-		# Find the record
-		oSMS = TemplateSMS.get(req.data._id)
-
-		# If it doesn't exist
-		if not oSMS:
-			return Error(
-				errors.body.DB_NO_RECORD, (req.data._id, 'template_sms')
-			)
-
-		# Delete the record and return the result
-		return Response(
-			oSMS.delete(changes={'user': sUserID})
-		)
-
-	def template_sms_update(self, req: jobject) -> Response:
-		"""Template SMS update
-
-		Updated sms content of an existing template record instance
-
-		Arguments:
-			req (jobject): Contains data and session if available
-
-		Returns:
-			Response
-		"""
-
-		# Make sure the client has access via the session
-		sUserID = access.internal_or_verify(req, 'mouth_content', rights.UPDATE)
-
-		# Check minimum fields
-		try: evaluate(req.data, ['_id', 'content'])
-		except ValueError as e:
-			return Error(
-				errors.body.DATA_FIELDS, [[f, 'missing'] for f in e.args]
-			)
-
-		# Find the record
-		oSMS = TemplateSMS.get(req.data._id)
-
-		# If it doesn't exist
-		if not oSMS:
-			return Error(
-				errors.body.DB_NO_RECORD, (req.data._id, 'template_sms')
-			)
-
-		# Update the content
-		try:
-			oSMS['content'] = req.data['content']
-		except ValueError as e:
-			return Error(errors.body.DATA_FIELDS, [e.args[0]])
-
-		# Find the primary template variables
-		dTemplate = Template.get(oSMS['template'], raw=['variables'])
-
-		# Check content for errors
-		lErrors = self._checkTemplateContent(
-			req.data,
-			['content'],
-			dTemplate['variables']
-		)
-
-		# If there's any errors
-		if lErrors:
-			return Error(errors.TEMPLATE_CONTENT_ERROR, lErrors)
-
-		# Save the record and return the result
-		return Response(
-			oSMS.save(changes={'user': sUserID})
 		)
 
 	def template_sms_generate_create(self, req: jobject) -> Response:
@@ -1717,5 +1249,5 @@ class Mouth(Service):
 
 		# Fetch and return all templates
 		return Response(
-			Template.get(raw=True, orderby='name')
+			Template.get(raw = True)
 		)

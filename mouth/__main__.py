@@ -37,6 +37,8 @@ def main():
 		'data': './.mouth',
 		'records': 'primary'
 	})
+	if '~' in conf['data']:
+		conf['data'] = expanduser(conf['data'])
 
 	# Add the primary host
 	record_mysql.add_host(config.mysql[conf['records']]({
@@ -63,8 +65,6 @@ def main():
 
 		# If we are installing
 		if argv[1] == 'install':
-			if '~' in conf['data']:
-				conf['data'] = expanduser(conf['data'])
 			return install.install(conf['data'])
 
 		# Else, if we are explicitly stating the rest service
@@ -73,8 +73,6 @@ def main():
 
 		# Else, if we are upgrading
 		elif argv[1] == 'upgrade':
-			if '~' in conf['data']:
-				conf['data'] = expanduser(conf['data'])
 			return upgrade(
 				abspath(conf['data']),
 				Path(__file__).parent.resolve()
