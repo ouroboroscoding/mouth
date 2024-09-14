@@ -18,7 +18,7 @@ from os.path import abspath
 from pathlib import Path
 
 # Module imports
-from mouth.records import locale, template
+from mouth.records import Locale, Template, TemplateEmail, TemplateSMS
 
 def install(data):
 	"""Install
@@ -34,8 +34,10 @@ def install(data):
 	"""
 
 	# Install records
-	locale.Locale.install()
-	template.Template.install()
+	Locale.table_create()
+	Template.table_create()
+	TemplateEmail.table_create()
+	TemplateSMS.table_create()
 
 	# Store the last known upgrade version
 	set_latest(

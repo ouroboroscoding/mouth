@@ -19,7 +19,7 @@ setup(
 	author='Chris Nasr - Ouroboros Coding Inc.',
 	author_email='chris@ouroboroscoding.com',
 	license='Custom',
-	packages=['mouth', 'mouth.records'],
+	packages=['mouth'],
 	package_data={'mouth': [
 		'definitions/*.json',
 		'upgrades/*'
@@ -28,9 +28,13 @@ setup(
 	install_requires=[
 		'body-oc>=2.0.0,<2.1',
 		'brain-oc>=2.0.0,<2.1',
-		'twilio==8.9.1',
+		'define-oc>=1.0.1,<1.1',
+		'rest-mysql>=1.0.0,<1.1',
 		'upgrade-oc>=1.0.0,<1.1'
 	],
+	extras_require={
+		'sms': [ 'twilio==8.9.1' ]
+	},
 	entry_points={
 		'console_scripts': ['mouth=mouth.__main__:main']
 	},

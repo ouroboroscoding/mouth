@@ -3,33 +3,25 @@
 		"auto_primary": "UUID()",
 		"changes": ["user"],
 		"create": [
-			"_archived", "_created", "_updated", "name", "variables"
+			"_created", "_updated", "template", "locale", "subject", "text",
+			"html"
 		],
 		"db": "mouth",
 		"host": "mouth",
 		"indexes": {
-			"_archived": null,
-			"name": {"unique": null}
+			"template_locale": {"unique": [ "template", "locale" ]}
 		},
 		"primary": "_id",
-		"table": "mouth_template",
+		"table": "mouth_template_email",
 		"charset": "utf8mb4",
 		"collate": "utf8mb4_unicode_ci"
 	},
 
-	"__name__": "Mouth_Template",
+	"__name__": "Mouth_Template_Email",
 
 	"_id": {
 		"__type__": "uuid",
 		"__optional__": true
-	},
-
-	"_archived": {
-		"__type__": "bool",
-		"__optional__": true,
-		"__sql__": {
-			"opts": "not null default 0"
-		}
 	},
 
 	"_created": {
@@ -48,19 +40,38 @@
 		}
 	},
 
-	"name": {
-		"__type__": "string",
-		"__maximum__": "64"
+	"template": {
+		"__type__": "uuid"
 	},
 
-	"variables": {
-		"__hash__": {
-			"__type__": "string",
-			"__regex__": "^[a-z_]+$"
-		},
+	"locale": {
 		"__type__": "string",
+		"__regex__": "^[a-z]{2}-[A-Z]{2}$",
 		"__sql__": {
-			"json": true
+			"type": "char(5)"
+		}
+	},
+
+	"subject": {
+		"__type__": "string",
+		"__maximum__": 255
+	},
+
+	"text": {
+		"__type__": "string",
+		"__maximum__": 65535,
+		"__ui__": {
+			"title": "Plain Text",
+			"type": "textarea"
+		}
+	},
+
+	"html": {
+		"__type__": "string",
+		"__maximum__": 65535,
+		"__ui__": {
+			"title": "HTML",
+			"type": "textarea"
 		}
 	}
 }

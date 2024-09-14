@@ -12,7 +12,7 @@ __created__		= "2022-12-12"
 
 # Ouroboros imports
 from config import config
-import record_mysql
+from rest_mysql.Record_MySQL import add_host, timestamp_timezone
 from upgrade import upgrade
 
 # Python imports
@@ -41,7 +41,7 @@ def main():
 		conf['data'] = expanduser(conf['data'])
 
 	# Add the primary host
-	record_mysql.add_host(config.mysql[conf['records']]({
+	add_host('mouth', config.mysql[conf['records']]({
 		'charset': 'utf8',
 		'host': 'localhost',
 		'passwd': '',
@@ -50,7 +50,7 @@ def main():
 	}))
 
 	# Set the timestamp timezone
-	record_mysql.timestamp_timezone(
+	timestamp_timezone(
 		config.mysql.timestamp_timezone('+00:00')
 	)
 
